@@ -20,7 +20,7 @@
     "src"
   ],
   "scripts": {
-    "build": "echo @chartcraft/svelte ships source .svelte files (standard for Svelte libs) - no build step",
+    "build": "node -e \"console.log('@chartcraft/svelte ships source .svelte files (standard for Svelte libs) - no build step')\"",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

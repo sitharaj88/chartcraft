@@ -1,8 +1,10 @@
 name: Deploy docs to GitHub Pages
 
+# Manual only — run from the Actions tab ("Run workflow"), or with
+#   gh workflow run deploy-docs.yml --ref main
+# The automatic push trigger is intentionally disabled; restore the `push:` key
+# below to deploy the docs on every push to main again.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
