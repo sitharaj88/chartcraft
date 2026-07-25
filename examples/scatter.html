@@ -1,0 +1,64 @@
+﻿<!--
+  ChartCraft example â€” scatter chart with [x, y] pairs.
+  Run `npm run build` at the repo root first, then serve the REPO ROOT with any
+  static server (e.g. `npx serve`) and open /examples/scatter.html.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChartCraft â€” Scatter</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0 auto; padding: 2rem 1.5rem; max-width: 52rem;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #fcfcfb; color: #0b0b0b;
+    }
+    @media (prefers-color-scheme: dark) { body { background: #1a1a19; color: #ffffff; } }
+    a { color: #2a78d6; } @media (prefers-color-scheme: dark) { a { color: #3987e5; } }
+    #chart { height: 420px; }
+  </style>
+</head>
+<body>
+  <p><a href="index.html">â† All examples</a></p>
+  <div id="chart"></div>
+
+  <script type="module">
+    import { createChart } from '../packages/core/dist/index.mjs';
+
+    // Daily readings: [mean outdoor temperature Â°C, energy consumption kWh].
+    // Deterministic pseudo-random so the chart is reproducible.
+    function readings(seed, base, slope, n) {
+      const pts = [];
+      let s = seed;
+      for (let i = 0; i < n; i++) {
+        s = (s * 1103515245 + 12345) % 2147483648;
+        const temp = -5 + (s % 3000) / 100;              // -5 â€¦ 25 Â°C
+        s = (s * 1103515245 + 12345) % 2147483648;
+        const noise = ((s % 1000) / 1000 - 0.5) * 30;    // Â±15 kWh
+        pts.push([Math.round(temp * 10) / 10, Math.round(base - slope * temp + noise)]);
+      }
+      return pts;
+    }
+
+    createChart(document.querySelector('#chart'), {
+      type: 'scatter',
+      title: 'Heating energy vs. outdoor temperature',
+      subtitle: 'Daily readings, one point per day (2025â€“2026 season)',
+      data: {
+        series: [
+          { id: 'hq', name: 'HQ building', data: readings(42, 260, 6.5, 120) },
+          { id: 'warehouse', name: 'Warehouse', data: readings(7, 180, 4.0, 120) },
+        ],
+      },
+      xAxis: {
+        label: 'Mean outdoor temperature (Â°C)',
+        grid: true, // both positions matter on a scatter â€” turn on x grid too
+      },
+      yAxis: { label: 'Energy (kWh/day)', min: 0 },
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+﻿<!--
+  ChartCraft example â€” pie and donut charts.
+  Run `npm run build` at the repo root first, then serve the REPO ROOT with any
+  static server (e.g. `npx serve`) and open /examples/pie-donut.html.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChartCraft â€” Pie &amp; donut</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0 auto; padding: 2rem 1.5rem; max-width: 60rem;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #fcfcfb; color: #0b0b0b;
+    }
+    @media (prefers-color-scheme: dark) { body { background: #1a1a19; color: #ffffff; } }
+    a { color: #2a78d6; } @media (prefers-color-scheme: dark) { a { color: #3987e5; } }
+    .row { display: flex; flex-wrap: wrap; gap: 1.5rem; }
+    .row > div { flex: 1 1 20rem; height: 360px; }
+    p.note { font-size: .9rem; color: #52514e; }
+    @media (prefers-color-scheme: dark) { p.note { color: #c3c2b7; } }
+  </style>
+</head>
+<body>
+  <p><a href="index.html">â† All examples</a></p>
+  <div class="row">
+    <div id="pie"></div>
+    <div id="donut"></div>
+  </div>
+  <p class="note">
+    Slices use the object data shape â€” <code>{ x: label, y: value }</code>.
+    Keep pies to a handful of slices; beyond that, a horizontal bar reads better.
+  </p>
+
+  <script type="module">
+    import { createChart } from '../packages/core/dist/index.mjs';
+
+    createChart(document.querySelector('#pie'), {
+      type: 'pie',
+      title: 'Support tickets by category',
+      subtitle: 'Last 30 days',
+      data: {
+        series: [{
+          id: 'tickets', name: 'Tickets',
+          data: [
+            { x: 'Billing', y: 342 },
+            { x: 'Onboarding', y: 271 },
+            { x: 'Bug reports', y: 198 },
+            { x: 'Feature requests', y: 84 },
+            { x: 'Other', y: 61 },
+          ],
+        }],
+      },
+    });
+
+    createChart(document.querySelector('#donut'), {
+      type: 'donut',
+      title: 'Cloud spend by service',
+      subtitle: 'June 2026',
+      data: {
+        series: [{
+          id: 'spend', name: 'Spend (USD)',
+          data: [
+            { x: 'Compute', y: 41800 },
+            { x: 'Storage', y: 18300 },
+            { x: 'Networking', y: 9600 },
+            { x: 'Databases', y: 14100 },
+            { x: 'Other', y: 4200 },
+          ],
+        }],
+      },
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+﻿<!--
+  ChartCraft example â€” horizontal bar chart.
+  Run `npm run build` at the repo root first, then serve the REPO ROOT with any
+  static server (e.g. `npx serve`) and open /examples/bar-horizontal.html.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChartCraft â€” Bar (horizontal)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0 auto; padding: 2rem 1.5rem; max-width: 52rem;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #fcfcfb; color: #0b0b0b;
+    }
+    @media (prefers-color-scheme: dark) { body { background: #1a1a19; color: #ffffff; } }
+    a { color: #2a78d6; } @media (prefers-color-scheme: dark) { a { color: #3987e5; } }
+    #chart { height: 420px; }
+    p.note { font-size: .9rem; color: #52514e; }
+    @media (prefers-color-scheme: dark) { p.note { color: #c3c2b7; } }
+  </style>
+</head>
+<body>
+  <p><a href="index.html">â† All examples</a></p>
+  <div id="chart"></div>
+  <p class="note">
+    Horizontal bars (<code>horizontal: true</code>) keep long category labels
+    readable â€” no truncation, no rotated text. The data here is pre-sorted by
+    value, the sensible choice when the category order carries no meaning.
+  </p>
+
+  <script type="module">
+    import { createChart } from '../packages/core/dist/index.mjs';
+
+    createChart(document.querySelector('#chart'), {
+      type: 'bar',
+      horizontal: true,
+      title: 'Units sold by product line',
+      subtitle: 'FY2026 year to date',
+      data: {
+        categories: [
+          'Precision torque drivers',
+          'Industrial hex key sets',
+          'Cordless impact wrenches',
+          'Digital calipers',
+          'Bench vises',
+          'Laser distance meters',
+          'Socket organizer trays',
+        ],
+        series: [
+          { id: 'units', name: 'Units sold',
+            data: [48210, 39560, 33470, 29840, 21730, 18990, 14520] },
+        ],
+      },
+      xAxis: {
+        label: 'Units',
+        min: 0,
+        ticks: { format: (v) => Number(v).toLocaleString('en-US') },
+      },
+      // Single series: the legend auto-hides; the title names the measure.
+    });
+  </script>
+</body>
+</html>

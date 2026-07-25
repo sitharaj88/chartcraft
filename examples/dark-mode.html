@@ -1,0 +1,85 @@
+﻿<!--
+  ChartCraft example â€” theme switching with chart.update().
+  Run `npm run build` at the repo root first, then serve the REPO ROOT with any
+  static server (e.g. `npx serve`) and open /examples/dark-mode.html.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChartCraft â€” Dark mode</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0 auto; padding: 2rem 1.5rem; max-width: 52rem;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #fcfcfb; color: #0b0b0b;
+      transition: background-color .2s, color .2s;
+    }
+    body.dark { background: #1a1a19; color: #ffffff; }
+    body.auto { background: #fcfcfb; color: #0b0b0b; }
+    @media (prefers-color-scheme: dark) { body.auto { background: #1a1a19; color: #ffffff; } }
+    a { color: #2a78d6; } body.dark a { color: #3987e5; }
+    #chart { height: 380px; }
+    .controls { display: flex; gap: .5rem; margin-bottom: 1rem; }
+    button {
+      font: inherit; padding: .4rem .9rem; border-radius: 6px; cursor: pointer;
+      border: 1px solid #c3c2b7; background: transparent; color: inherit;
+    }
+    body.dark button { border-color: #383835; }
+    button[aria-pressed="true"] { border-color: #2a78d6; outline: 2px solid #2a78d6; outline-offset: -1px; }
+    p.note { font-size: .9rem; color: #52514e; }
+    body.dark p.note { color: #c3c2b7; }
+  </style>
+</head>
+<body class="auto">
+  <p><a href="index.html">â† All examples</a></p>
+
+  <div class="controls" role="group" aria-label="Chart theme">
+    <button type="button" data-theme="light" aria-pressed="false">Light</button>
+    <button type="button" data-theme="dark" aria-pressed="false">Dark</button>
+    <button type="button" data-theme="auto" aria-pressed="true">Auto</button>
+  </div>
+
+  <div id="chart"></div>
+  <p class="note">
+    Each click calls <code>chart.update({ theme })</code> â€” a diffed re-render,
+    not a rebuild. In <strong>Auto</strong>, the chart tracks
+    <code>prefers-color-scheme</code> live: switch your OS theme and watch it follow.
+    Dark palette values are separately validated, not an inversion of light.
+  </p>
+
+  <script type="module">
+    import { createChart } from '../packages/core/dist/index.mjs';
+
+    const chart = createChart(document.querySelector('#chart'), {
+      type: 'line',
+      title: 'Weekly deployments',
+      subtitle: 'Per team, trailing 12 weeks',
+      data: {
+        categories: ['W27', 'W28', 'W29', 'W30', 'W31', 'W32',
+                     'W33', 'W34', 'W35', 'W36', 'W37', 'W38'],
+        series: [
+          { id: 'platform', name: 'Platform', data: [14, 12, 17, 15, 19, 18, 21, 16, 22, 24, 20, 25] },
+          { id: 'mobile', name: 'Mobile', data: [8, 9, 7, 11, 10, 12, 9, 13, 12, 14, 15, 13] },
+          { id: 'data', name: 'Data', data: [5, 6, 6, 4, 7, 8, 6, 9, 8, 7, 10, 11] },
+        ],
+      },
+      yAxis: { label: 'Deployments', min: 0 },
+      theme: 'auto', // the default, stated here for clarity
+    });
+
+    const buttons = document.querySelectorAll('button[data-theme]');
+    buttons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const theme = btn.dataset.theme;           // 'light' | 'dark' | 'auto'
+        chart.update({ theme });
+        // Keep the page chrome in step with the chart:
+        document.body.className = theme;
+        buttons.forEach((b) => b.setAttribute('aria-pressed', String(b === btn)));
+      });
+    });
+  </script>
+</body>
+</html>

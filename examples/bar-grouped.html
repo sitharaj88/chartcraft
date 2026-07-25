@@ -1,0 +1,58 @@
+﻿<!--
+  ChartCraft example â€” grouped bar chart.
+  Run `npm run build` at the repo root first, then serve the REPO ROOT with any
+  static server (e.g. `npx serve`) and open /examples/bar-grouped.html.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChartCraft â€” Bar (grouped)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0 auto; padding: 2rem 1.5rem; max-width: 52rem;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #fcfcfb; color: #0b0b0b;
+    }
+    @media (prefers-color-scheme: dark) { body { background: #1a1a19; color: #ffffff; } }
+    a { color: #2a78d6; } @media (prefers-color-scheme: dark) { a { color: #3987e5; } }
+    #chart { height: 380px; }
+  </style>
+</head>
+<body>
+  <p><a href="index.html">â† All examples</a></p>
+  <div id="chart"></div>
+
+  <script type="module">
+    import { createChart } from '../packages/core/dist/index.mjs';
+
+    const usd = new Intl.NumberFormat('en-US', {
+      style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1,
+    });
+
+    createChart(document.querySelector('#chart'), {
+      type: 'bar',
+      title: 'Revenue by quarter',
+      subtitle: 'FY2026, by segment',
+      data: {
+        categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+        series: [
+          { id: 'product', name: 'Product', data: [12_400_000, 13_100_000, 14_800_000, 16_200_000] },
+          { id: 'services', name: 'Services', data: [6_100_000, 6_400_000, 7_000_000, 7_900_000] },
+          { id: 'support', name: 'Support', data: [2_800_000, 3_000_000, 3_100_000, 3_400_000] },
+        ],
+      },
+      yAxis: {
+        label: 'Revenue',
+        min: 0,
+        ticks: { count: 5, format: (v) => usd.format(v) },
+      },
+      // Bars default to per-mark tooltips; shared works well for
+      // within-quarter comparison across segments:
+      tooltip: { shared: true },
+    });
+  </script>
+</body>
+</html>

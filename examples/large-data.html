@@ -1,0 +1,104 @@
+﻿<!--
+  ChartCraft example â€” 100,000 points with LTTB downsampling.
+  Run `npm run build` at the repo root first, then serve the REPO ROOT with any
+  static server (e.g. `npx serve`) and open /examples/large-data.html.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChartCraft â€” Large data (100k points)</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0 auto; padding: 2rem 1.5rem; max-width: 56rem;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #fcfcfb; color: #0b0b0b;
+    }
+    @media (prefers-color-scheme: dark) { body { background: #1a1a19; color: #ffffff; } }
+    a { color: #2a78d6; } @media (prefers-color-scheme: dark) { a { color: #3987e5; } }
+    #chart { height: 400px; }
+    .controls { display: flex; gap: .5rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+    button {
+      font: inherit; padding: .4rem .9rem; border-radius: 6px; cursor: pointer;
+      border: 1px solid #c3c2b7; background: transparent; color: inherit;
+    }
+    @media (prefers-color-scheme: dark) { button { border-color: #383835; } }
+    button[aria-pressed="true"] { border-color: #2a78d6; outline: 2px solid #2a78d6; outline-offset: -1px; }
+    output { font-size: .9rem; color: #52514e; }
+    @media (prefers-color-scheme: dark) { output { color: #c3c2b7; } }
+    p.note { font-size: .9rem; color: #52514e; max-width: 46rem; }
+    @media (prefers-color-scheme: dark) { p.note { color: #c3c2b7; } }
+  </style>
+</head>
+<body>
+  <p><a href="index.html">â† All examples</a></p>
+
+  <div class="controls">
+    <button type="button" id="ds-on" aria-pressed="true">Downsampling on (threshold 5000)</button>
+    <button type="button" id="ds-off" aria-pressed="false">Downsampling off (raw 100k)</button>
+    <output id="status" aria-live="polite"></output>
+  </div>
+
+  <div id="chart"></div>
+  <p class="note">
+    100,000 simulated sensor readings (one every ~5&nbsp;s over 6 days). With
+    downsampling on â€” the default â€” series beyond the threshold are reduced
+    with LTTB (Largest-Triangle-Three-Buckets) before rendering, preserving
+    peaks, troughs, and outliers. Tooltips, events, and the accessibility data
+    table always use the full-resolution data. Try both modes and drag-resize
+    the window to feel the difference.
+  </p>
+
+  <script type="module">
+    import { createChart } from '../packages/core/dist/index.mjs';
+
+    // 100k points: epoch-ms x (numbers, cheaper than Date objects at this
+    // scale â€” hence the explicit time axis), noisy daily-cycle temperature y.
+    const N = 100_000;
+    const start = Date.parse('2026-07-01T00:00:00Z');
+    const stepMs = 5_184; // â‰ˆ 6 days / 100k
+    const data = new Array(N);
+    let s = 1234567;
+    for (let i = 0; i < N; i++) {
+      s = (s * 1103515245 + 12345) % 2147483648;
+      const t = start + i * stepMs;
+      const daily = 4.5 * Math.sin((2 * Math.PI * (i * stepMs)) / 86_400_000);
+      const noise = ((s % 1000) / 1000 - 0.5) * 1.6;
+      const spike = s % 9973 === 0 ? 6 : 0; // rare outliers â€” LTTB keeps them
+      data[i] = [t, Math.round((21 + daily + noise + spike) * 100) / 100];
+    }
+
+    const chart = createChart(document.querySelector('#chart'), {
+      type: 'line',
+      title: 'Server-room temperature',
+      subtitle: '100,000 readings over 6 days',
+      data: {
+        series: [{ id: 'temp', name: 'Temperature', data, showMarkers: false }],
+      },
+      xAxis: { type: 'time', label: 'Time' },
+      yAxis: { label: 'Â°C' },
+      animation: false, // measuring render cost, not the easing function
+      downsample: { enabled: true, threshold: 5000 }, // the default, stated explicitly
+    });
+
+    const status = document.querySelector('#status');
+    chart.on('render', ({ reason }) => {
+      status.value = `rendered (${reason})`;
+    });
+
+    const onBtn = document.querySelector('#ds-on');
+    const offBtn = document.querySelector('#ds-off');
+    function setDownsampling(enabled) {
+      const t0 = performance.now();
+      chart.update({ downsample: { enabled } });
+      status.value = `update() returned in ${(performance.now() - t0).toFixed(1)} ms`;
+      onBtn.setAttribute('aria-pressed', String(enabled));
+      offBtn.setAttribute('aria-pressed', String(!enabled));
+    }
+    onBtn.addEventListener('click', () => setDownsampling(true));
+    offBtn.addEventListener('click', () => setDownsampling(false));
+  </script>
+</body>
+</html>

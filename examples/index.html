@@ -1,0 +1,71 @@
+﻿<!--
+  ChartCraft examples â€” gallery.
+  Run `npm run build` at the repo root first, then serve the REPO ROOT with any
+  static server (e.g. `npx serve`) and open /examples/index.html.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ChartCraft â€” Examples</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0 auto; padding: 2rem 1.5rem; max-width: 46rem;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: #fcfcfb; color: #0b0b0b; line-height: 1.55;
+    }
+    @media (prefers-color-scheme: dark) { body { background: #1a1a19; color: #ffffff; } }
+    h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+    p.lead { margin: 0 0 2rem; color: #52514e; }
+    @media (prefers-color-scheme: dark) { p.lead { color: #c3c2b7; } }
+    ul { list-style: none; padding: 0; margin: 0; }
+    li { padding: .75rem 0; border-bottom: 1px solid #e1e0d9; }
+    @media (prefers-color-scheme: dark) { li { border-bottom-color: #2c2c2a; } }
+    a { color: #2a78d6; font-weight: 600; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    @media (prefers-color-scheme: dark) { a { color: #3987e5; } }
+    li span { display: block; font-size: .9rem; color: #52514e; }
+    @media (prefers-color-scheme: dark) { li span { color: #c3c2b7; } }
+    aside {
+      margin: 0 0 1.5rem; padding: .75rem 1rem; border: 1px solid #e1e0d9;
+      border-radius: 6px; font-size: .9rem;
+    }
+    @media (prefers-color-scheme: dark) { aside { border-color: #2c2c2a; } }
+    code { font-family: ui-monospace, Consolas, monospace; font-size: .9em; }
+  </style>
+</head>
+<body>
+  <h1>ChartCraft examples</h1>
+  <p class="lead">Runnable vanilla demos against the built <code>@chartcraft/core</code>.</p>
+
+  <aside>
+    <strong>Setup:</strong> run <code>npm run build</code> at the repo root, then serve
+    the repo root with any static server (e.g. <code>npx serve</code>) and browse to
+    <code>/examples/</code>. The demos import
+    <code>../packages/core/dist/index.mjs</code> directly.
+  </aside>
+
+  <ul>
+    <li><a href="line-basic.html">Line â€” basic</a>
+      <span>Two revenue series over months: categories, auto legend, shared crosshair tooltip.</span></li>
+    <li><a href="area-stacked.html">Area â€” stacked</a>
+      <span>Site traffic by channel, stacked, with a monotone curve and a null gap.</span></li>
+    <li><a href="bar-grouped.html">Bar â€” grouped</a>
+      <span>Quarterly revenue by segment; grouped bars with axis label and tick formatting.</span></li>
+    <li><a href="bar-horizontal.html">Bar â€” horizontal</a>
+      <span>Units sold by product, <code>horizontal: true</code> â€” the readable form for long category labels.</span></li>
+    <li><a href="scatter.html">Scatter</a>
+      <span>Outdoor temperature vs. energy consumption as <code>[x, y]</code> pairs, two buildings.</span></li>
+    <li><a href="pie-donut.html">Pie &amp; donut</a>
+      <span>Composition with <code>{ x, y }</code> slice data â€” pie and donut side by side.</span></li>
+    <li><a href="dark-mode.html">Dark mode &amp; theme switching</a>
+      <span>Light / dark / auto toggle driving <code>chart.update({ theme })</code> live.</span></li>
+    <li><a href="large-data.html">Large data â€” 100k points</a>
+      <span>100,000-point sensor series with automatic LTTB downsampling, plus a toggle to feel the difference.</span></li>
+    <li><a href="accessibility.html">Accessibility</a>
+      <span>Visible data table, keyboard navigation map, and live announcements â€” try it with a screen reader.</span></li>
+  </ul>
+</body>
+</html>
