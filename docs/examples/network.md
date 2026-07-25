@@ -172,11 +172,14 @@ const options: TypedChartOptions = {
   (proportionality holds above the floor). A graph where **no** node carries a value
   draws every node at the mid radius — "no value" must not read as "big". Radii are
   in px and are *not* scaled by the fit, so a very dense graph can still overlap.
-- **`resolved.data` is rewritten to the node list sorted by degree descending**
-  (ties keep your order), because keyboard navigation walks nodes by degree. So
-  `PointEvent.dataIndex` is a **degree rank**, and `getOptions()` echoes the
-  reordered list. The a11y table, `exportData()`, tooltips and announcements all use
-  that same order, so nothing disagrees. Nothing you passed is mutated.
+- **`resolved.data` is rewritten into one reading-order sequence: each node
+  (degree descending, ties keeping your order) followed by its own outgoing
+  links** — the same shape `sankey` uses. Links are therefore reachable by
+  keyboard and appear in the data table, indented under their source. So
+  `PointEvent.dataIndex` is a **reading-order index**, not a node rank, and
+  `getOptions()` echoes that sequence. The a11y table, `exportData()`, tooltips,
+  hit-testing and announcements all share it, so nothing disagrees. Nothing you
+  passed is mutated.
 - **Link color is `theme.textMuted` at 0.35 alpha** — identical in both schemes and
   legible on either surface. (`theme.axisLine` at 0.35 alpha is effectively invisible
   on the dark surface.)

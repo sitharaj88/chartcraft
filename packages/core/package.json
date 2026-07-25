@@ -1,6 +1,6 @@
 {
   "name": "@chartcraft/core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "ChartCraft core \u2014 framework-agnostic charting engine (zero dependencies)",
   "license": "MIT",
   "sideEffects": false,

@@ -132,7 +132,12 @@ export const ganttDefinition: ChartTypeDefinition = {
   id: 'gantt',
   // Task rows on screen-y, a continuous TIME axis on screen-x, and only the
   // time axis wears chrome (a list of rows has nothing to tick).
-  needs: { cartesianAxes: true, axes: 'rows', axisChrome: { x: true, y: false }, xScale: 'auto' },
+  //
+  // v0.3.2 (E-5): the time axis is DECLARED (`xScale: 'time'`) rather than
+  // written into the caller's `xAxis.type` from `resolveOptions` — axis options
+  // belong to the caller (deviation 15), and the declaration is what makes
+  // `inferXType` read a bare epoch number as an instant.
+  needs: { cartesianAxes: true, axes: 'rows', axisChrome: { x: true, y: false }, xScale: 'time' },
 
   resolveOptions(resolved, raw) {
     const tasks = parseGanttTasks(resolved.data.series);
@@ -140,9 +145,10 @@ export const ganttDefinition: ChartTypeDefinition = {
       const ordered = ganttTasksInRowOrder(buildGanttRows(tasks));
       resolved.data = singleSeriesData(resolved.data, 'Tasks', ordered.map(taskToPoint));
     }
-    // Pin a TIME axis spanning every task (starts alone would clip the bars).
+    // Pin the DOMAIN to span every task (starts alone would clip the bars). The
+    // axis KIND is declared in `needs`, not written here.
     const domain = ganttTimeDomain(tasks);
-    const xAxis = { ...resolved.xAxis, type: 'time' as const };
+    const xAxis = { ...resolved.xAxis };
     if (domain) {
       if (typeof xAxis.min !== 'number') xAxis.min = domain[0];
       if (typeof xAxis.max !== 'number') xAxis.max = domain[1];

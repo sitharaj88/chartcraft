@@ -127,9 +127,9 @@ highlight and tooltip as a hovered point, and fires the same
 
 **Every one of the 39 types is keyboard-navigable**, each walking its own natural
 reading order: heatmap cells row-major, funnel stages, hierarchy nodes
-depth-first, calendar days in data order, word-cloud terms by rank, network nodes
-by degree, and a sankey's one flat sequence of *each node followed by its own
-outgoing links*. Whatever the order, `Enter` fires `pointclick` with a
+depth-first, calendar days in data order, word-cloud terms by rank, and — for
+both `sankey` and `network` — one flat sequence of *each node followed by its own
+outgoing links*, so no edge is unreachable. Whatever the order, `Enter` fires `pointclick` with a
 `dataIndex` that means something for that type, and the live region always names
 the focused mark in full.
 

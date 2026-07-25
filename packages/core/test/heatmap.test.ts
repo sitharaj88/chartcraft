@@ -65,8 +65,13 @@ describe('heatmap color scale (exact math)', () => {
   });
 
   it('heatmapRamp defaults to the sequential palette', () => {
-    expect(heatmapRamp({})).toEqual(sequentialPalette);
-    expect(heatmapRamp({ heatmap: { ramp: ['#000000', '#ffffff'] } })).toEqual(['#000000', '#ffffff']);
+    expect(heatmapRamp({}, 'light')).toEqual(sequentialPalette);
+    expect(heatmapRamp({ heatmap: { ramp: ['#000000', '#ffffff'] } }, 'light')).toEqual(['#000000', '#ffffff']);
+  });
+
+  it('REVERSES the default ramp on a dark surface, and never a custom one', () => {
+    expect(heatmapRamp({}, 'dark')).toEqual([...sequentialPalette].reverse());
+    expect(heatmapRamp({ heatmap: { ramp: ['#000000', '#ffffff'] } }, 'dark')).toEqual(['#000000', '#ffffff']);
   });
 });
 

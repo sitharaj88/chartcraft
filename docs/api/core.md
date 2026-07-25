@@ -172,7 +172,7 @@ Four things to know about the snapshot:
   snapshot round-trips configuration, not a derived scale.
 - **`sankey`, `gantt` and `network` report normalized data.** Those types rewrite
   `data` into one synthetic series (marks in reading order / tasks in row order /
-  nodes by degree) — your own objects are never mutated, and an `update()`
+  each node followed by its own links) — your own objects are never mutated, and an `update()`
   re-derives everything from your original input.
 
 ### `exportImage(opts?)`
@@ -828,7 +828,7 @@ interface ChartEventMap {
 |---|---|---|
 | `seriesId` | `string` | Series identity. |
 | `seriesName` | `string` | Series display name. |
-| `dataIndex` | `number` | Index of the datum within `series.data` — **or the type's natural mark index**: a bin (histogram), a depth-first node (treemap/sunburst/icicle/circlepack), a rank (wordcloud, network by degree), a row (bullet, gantt), a reading-order mark (sankey). |
+| `dataIndex` | `number` | Index of the datum within `series.data` — **or the type's natural mark index**: a bin (histogram), a depth-first node (treemap/sunburst/icicle/circlepack), a rank (wordcloud), a row (bullet, gantt), a reading-order mark (sankey, network — each node followed by its own links). |
 | `x` | `number \| Date \| string \| null` | The datum's x value. |
 | `y` | `number \| null` | The datum's y value. |
 | `clientX`, `clientY` | `number` | Viewport coordinates of the pointer. **`-1` for keyboard-originated events.** |

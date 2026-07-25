@@ -76,11 +76,24 @@ describe('candlestick — layout math', () => {
 });
 
 describe('candlestick — rendering & animation policy', () => {
-  it('bodies are filled theme.up/theme.down and wicks are 1px', () => {
+  // ADAPTED (v0.3.1): this test used to assert that RISING bodies were FILLED
+  // `theme.up` — which is precisely the defect the audit measured. `up` and
+  // `down` separate at only ΔE 4.1 under deuteranopia, so a filled-vs-filled
+  // pair made colour the sole channel for the one distinction a candlestick
+  // exists to draw. Rising bodies are now hollow (surface-filled, `up`-stroked)
+  // and falling bodies solid — the platform convention — so the assertion is
+  // restated in those terms rather than dropped.
+  it('rising bodies are HOLLOW and falling bodies solid; wicks are 1px', () => {
     const { el } = mount({ type: 'candlestick', data: tuples });
     const ctx = ctxOf(el);
-    expect(ctx.__props.some((p) => p.prop === 'fillStyle' && p.value === lightTheme.up)).toBe(true);
+    // Falling candle: solid theme.down fill.
     expect(ctx.__props.some((p) => p.prop === 'fillStyle' && p.value === lightTheme.down)).toBe(true);
+    // Rising candles: never a theme.up FILL — the surface shows through, and
+    // theme.up appears as the body OUTLINE instead.
+    expect(ctx.__props.some((p) => p.prop === 'fillStyle' && p.value === lightTheme.up)).toBe(false);
+    expect(ctx.__props.some((p) => p.prop === 'strokeStyle' && p.value === lightTheme.up)).toBe(true);
+    // Two of the three candles rise, so exactly two bodies are outlined.
+    expect(ctx.__calls.filter((c) => c.method === 'strokeRect')).toHaveLength(2);
     expect(ctx.__props.some((p) => p.prop === 'lineWidth' && p.value === 1)).toBe(true);
     expect(bodyRects(el)).toHaveLength(3); // one body per candle
   });
@@ -137,7 +150,14 @@ describe('candlestick — tooltip, a11y, legend, keyboard', () => {
     expect(head).toEqual(['Time', 'Open', 'High', 'Low', 'Close']);
     const rows = el.querySelectorAll('.chartcraft-a11y-table tbody tr');
     expect(rows).toHaveLength(3);
-    expect([...rows[0]!.children].map((c) => c.textContent)).toEqual(['1', '100', '110', '95', '105']);
+    const cells = [...rows[0]!.children].map((c) => c.textContent);
+    expect(cells.slice(1)).toEqual(['100', '110', '95', '105']);
+    // v0.3.2 (E-5): candlestick DECLARES a time axis (`needs.xScale: 'time'`),
+    // so a numeric x is epoch ms and the column titled `Time` reads as one.
+    // This assertion used to demand the bare number `'1'` under that heading,
+    // which is exactly the defect (audit A-7 / E-5). Kept timezone-agnostic.
+    expect(cells[0]).not.toBe('1');
+    expect(cells[0]).toMatch(/\d\d:\d\d/);
   });
 
   it('keyboard navigation announces the OHLC values per candle', () => {

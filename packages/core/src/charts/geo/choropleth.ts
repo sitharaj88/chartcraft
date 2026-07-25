@@ -35,7 +35,7 @@ import type { PointPos, TypeGeom } from '../../layout';
 import type { DataModel, ResolvedOptions } from '../../model';
 import type { ChartTypeDefinition, DefinitionContext } from '../registry';
 import type { A11yTableSpec } from '../../a11y';
-import { sequentialPalette } from '../../theme';
+import { resolveSequentialRamp } from '../../theme';
 import { formatValue } from '../../util';
 import { rampColor } from '../matrix/color-scale';
 import { allRings, parseGeoFeatures, type ParsedGeoFeature } from './geojson';
@@ -98,10 +98,17 @@ export interface ChoroplethRow {
 
 // ---------------------------------------------------------------- pure math
 
-/** Resolved ramp (default: the sequential blue palette, as for heatmap). */
-export function choroplethRamp(opts: Pick<ResolvedOptions, 'choropleth'>): string[] {
-  const ramp = opts.choropleth?.ramp;
-  return ramp && ramp.length > 0 ? [...ramp] : [...sequentialPalette];
+/**
+ * Resolved ramp: the caller's `choropleth.ramp` verbatim, else the default
+ * sequential blue palette ORIENTED for the theme's surface (as for heatmap) — a
+ * near-zero feature may recede toward the surface, the highest-value one never
+ * does. See `theme#sequentialRampFor`.
+ */
+export function choroplethRamp(
+  opts: Pick<ResolvedOptions, 'choropleth'>,
+  scheme: 'light' | 'dark',
+): string[] {
+  return resolveSequentialRamp(opts.choropleth?.ramp, scheme);
 }
 
 /**
@@ -319,7 +326,7 @@ export const choroplethDefinition: ChartTypeDefinition = {
     }
 
     const [min, max] = choroplethExtent(model, choropleth);
-    const ramp = choroplethRamp(opts);
+    const ramp = choroplethRamp(opts, theme.colorScheme);
     const transform = fitExtent(allRings(features), projectionByName(projection), plot);
 
     const pos: (PointPos | null)[][] = model.series.map(() => []);
@@ -428,7 +435,7 @@ export const choroplethDefinition: ChartTypeDefinition = {
   legendCustomEl(ctx: DefinitionContext, doc: Document): HTMLElement | null {
     const { theme, model, opts } = ctx;
     const [min, max] = choroplethExtent(model, opts.choropleth);
-    const ramp = choroplethRamp(opts);
+    const ramp = choroplethRamp(opts, theme.colorScheme);
 
     const wrap = doc.createElement('div');
     wrap.className = 'chartcraft-choropleth-legend';

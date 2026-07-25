@@ -157,6 +157,24 @@ export function formatValue(v: number | Date | string | null, spanMs = 0): strin
   return String(v);
 }
 
+/**
+ * Format a DATA-AXIS value on an axis that may be temporal (v0.3.2, E-5).
+ *
+ * `formatValue` reaches its date formatter only for an actual `Date`, so a
+ * numeric epoch — which the contract's own `[number | Date, o, h, l, c]` tuple
+ * permits — came out as `1767.23B`. Sniffing "large number = epoch" is not a
+ * safe inference (integer `x` values are legal), so the DECISION is made
+ * upstream: a chart type declares `needs.xScale: 'time'`, `inferXType` honours
+ * it, and everything downstream asks `model.xType` rather than guessing.
+ *
+ * Pass `isTime = model.xType === 'time'`. On a time axis a finite number is
+ * epoch milliseconds by declaration; everything else formats as before.
+ */
+export function formatTemporal(v: number | Date | string | null, isTime: boolean, spanMs = 0): string {
+  if (isTime && typeof v === 'number' && Number.isFinite(v)) return formatDate(new Date(v), spanMs);
+  return formatValue(v, v instanceof Date ? spanMs : 0);
+}
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')

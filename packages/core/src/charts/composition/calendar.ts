@@ -4,7 +4,8 @@
  * One series of `{ x: Date, y: value }`. Day cells are laid out in WEEK
  * COLUMNS (7 weekday rows), month boundaries are separated by hairlines,
  * weekday labels sit left of the grid in `textMuted`, month labels above it,
- * and the color comes from `calendar.ramp` (default `sequentialPalette`) over
+ * and the color comes from `calendar.ramp` (default: the sequential palette
+ * DIRECTED by `theme.colorScheme`) over
  * the value extent. The legend is the gradient color-scale bar mounted through
  * the registry's `legendCustomEl` hook (heatmap's precedent).
  *
@@ -27,7 +28,7 @@ import type { A11yTableSpec } from '../../a11y';
 import type { NavContext } from '../../a11y/keyboard';
 import type { LegendItem } from '../../components/legend';
 import type { DataModel, ResolvedOptions } from '../../model';
-import { sequentialPalette } from '../../theme';
+import { resolveSequentialRamp } from '../../theme';
 import { formatValue } from '../../util';
 import { rampColor } from '../matrix/color-scale';
 import type {
@@ -249,10 +250,17 @@ export function calendarWeekStart(opts: Pick<ResolvedOptions, 'calendar'>): 0 | 
   return opts.calendar?.weekStart === 1 ? 1 : 0;
 }
 
-/** Resolved ramp (default: the sequential blue palette). */
-export function calendarRamp(opts: Pick<ResolvedOptions, 'calendar'>): string[] {
-  const ramp = opts.calendar?.ramp;
-  return ramp && ramp.length > 0 ? [...ramp] : [...sequentialPalette];
+/**
+ * Resolved ramp: the caller's `calendar.ramp` verbatim, else the default
+ * sequential blue palette ORIENTED for the theme's surface — a quiet day may
+ * recede toward the surface, the busiest day never does. See
+ * `theme#sequentialRampFor`.
+ */
+export function calendarRamp(
+  opts: Pick<ResolvedOptions, 'calendar'>,
+  scheme: 'light' | 'dark',
+): string[] {
+  return resolveSequentialRamp(opts.calendar?.ramp, scheme);
 }
 
 /** Value extent over the visible series; a degenerate extent is widened by 1. */
@@ -358,7 +366,7 @@ export const calendarDefinition: ChartTypeDefinition = {
 
     const grid = computeCalendarGrid(startDay, endDay, weekStart, rect);
     const [min, max] = calendarValueExtent(model);
-    const ramp = calendarRamp(opts);
+    const ramp = calendarRamp(opts, theme.colorScheme);
     const si = calendarSeriesIndex(model);
     const series = model.series[si];
 
@@ -496,7 +504,7 @@ export const calendarDefinition: ChartTypeDefinition = {
   legendCustomEl(ctx: DefinitionContext, doc: Document): HTMLElement | null {
     const { theme, model, opts } = ctx;
     const [min, max] = calendarValueExtent(model);
-    const ramp = calendarRamp(opts);
+    const ramp = calendarRamp(opts, theme.colorScheme);
 
     const wrap = doc.createElement('div');
     wrap.className = 'chartcraft-calendar-legend';

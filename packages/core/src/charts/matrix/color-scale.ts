@@ -68,6 +68,21 @@ export function relativeLuminance(hex: string): number {
 }
 
 /**
+ * WCAG contrast ratio between two hex colors (1..21, order-independent).
+ *
+ * The measure behind the sequential ramp's direction rule: a mark at 3:1 or
+ * better is legible against its surface, and the step carrying MAXIMUM
+ * magnitude must clear it in both color schemes (`theme#sequentialRampFor`).
+ */
+export function contrastRatio(a: string, b: string): number {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  const hi = Math.max(la, lb);
+  const lo = Math.min(la, lb);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
  * Contrasting ink for text drawn directly on a colored mark: dark ink on
  * light cells, white ink on dark cells.
  */

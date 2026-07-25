@@ -37,6 +37,9 @@ import { extendYDomainForDecorators, normalizeViewport, type Viewport } from './
 import { computeStacks, stackExtent } from './data/stack';
 import { getChartType, type ChartTypeDefinition } from './charts/registry';
 import { registerBuiltinChartTypes } from './charts';
+import type { MarkerShape } from './charts/markers';
+import { resolveTableMaxRows } from './a11y';
+import { resolveTheme } from './theme';
 
 /**
  * Registry lookup that guarantees the built-in definitions are registered
@@ -117,7 +120,8 @@ export interface ResolvedOptions {
   tooltip: ResolvedTooltip;
   animation: ResolvedAnimation;
   downsample: { enabled: boolean; threshold: number };
-  a11y: Required<Pick<A11yOptions, 'table' | 'keyboard'>> & Pick<A11yOptions, 'title' | 'description'>;
+  a11y: Required<Pick<A11yOptions, 'table' | 'keyboard' | 'tableMaxRows'>> &
+    Pick<A11yOptions, 'title' | 'description'>;
   // v0.2 per-type option blocks (passed through for the type definitions).
   histogram?: ChartOptions['histogram'];
   heatmap?: ChartOptions['heatmap'];
@@ -227,6 +231,7 @@ export function resolveOptions(raw: ChartOptions): ResolvedOptions {
     a11y: {
       table: raw.a11y?.table ?? 'hidden',
       keyboard: raw.a11y?.keyboard ?? true,
+      tableMaxRows: resolveTableMaxRows(raw.a11y?.tableMaxRows),
       ...(raw.a11y?.title !== undefined ? { title: raw.a11y.title } : {}),
       ...(raw.a11y?.description !== undefined ? { description: raw.a11y.description } : {}),
     },
@@ -279,7 +284,29 @@ export interface NormalizedSeries {
   kind: SeriesKind | null;
   /** bubble: min/max marker diameter px (value maps to area). */
   sizeRange?: [number, number];
+  /**
+   * The points that are DRAWN: downsampled and/or narrowed to the zoom window
+   * when either applies. Everything on the render path reads this.
+   */
   points: NormalizedPoint[];
+  /**
+   * Every point the caller supplied — set ONLY when `points` is a lossy view of
+   * it (downsampling and/or a zoom window dropped rows), and captured before
+   * either is applied, so it is both un-downsampled and un-windowed.
+   *
+   * The accessible data table and `exportData()` read this. LTTB selects the
+   * points that best preserve a line's visible SHAPE; it has no notion of which
+   * rows matter semantically. Serving its output as "the data" means a
+   * screen-reader user is handed a visual approximation — 5,000 of 60,000 rows —
+   * with no way to tell anything was dropped, while a sighted user can zoom in
+   * and recover every point. An export that silently truncates is the same bug
+   * wearing a different hat.
+   *
+   * Retaining the array costs one reference: these points already exist at this
+   * moment in `buildModel`, and the alternative (rebuilding a second,
+   * full-fidelity model) pays for a whole extra normalize pass.
+   */
+  sourcePoints?: NormalizedPoint[];
   /** Stack bounds (set only when this series stacks), aligned with points. */
   y0?: (number | null)[];
   y1?: (number | null)[];
@@ -322,6 +349,88 @@ export function seriesColor(s: NormalizedSeries, theme: Theme): string {
   if (s.colorOverride) return s.colorOverride;
   const slots = theme.series;
   return slots[s.paletteIndex % slots.length] ?? '#888888';
+}
+
+// ------------------------------------------------- composite encoding (9+)
+
+/**
+ * How many times a series' palette slot has wrapped past the end of the
+ * validated hue order: 0 for the first 8 series, 1 for series 9-16, and so on.
+ *
+ * The 8-slot order is a colorblind-safety mechanism (adjacent-pair CVD ΔE ≥ 8),
+ * and there is no 9th safe hue to generate — a generated one would be an
+ * unvalidated color, which is the thing the palette rules exist to prevent. So
+ * the hue order is REUSED and a second, non-color channel separates the repeat.
+ *
+ * The alternative — silently folding series 9+ into an "Other" bucket — is not
+ * available to a library: it would destroy data the caller explicitly asked us
+ * to draw. Folding is the right ANSWER, but it is the caller's to make, so the
+ * pipeline recommends it once (see `warnPaletteOverflow`) and keeps drawing
+ * every series in the meantime.
+ */
+export function seriesCycle(s: NormalizedSeries, theme: Theme): number {
+  if (s.colorOverride) return 0;
+  const n = theme.series.length;
+  return n > 0 ? Math.floor(s.paletteIndex / n) : 0;
+}
+
+/**
+ * Dash patterns for the composite encoding, indexed by `seriesCycle`.
+ * Cycle 0 (the validated 8) is always solid — nothing about the first eight
+ * series changes. Patterns are chosen to stay distinguishable at 2px stroke
+ * width: a long dash, a fine dot, and a dash-dot.
+ */
+export const SERIES_DASH_CYCLE: readonly (readonly number[])[] = [
+  [], // cycle 0 — solid
+  [7, 4],
+  [1.5, 3],
+  [10, 3, 2, 3],
+];
+
+/** Marker shapes for the composite encoding, indexed by `seriesCycle`. */
+export const SERIES_MARKER_CYCLE: readonly MarkerShape[] = ['circle', 'square', 'triangle', 'diamond'];
+
+/**
+ * Dash pattern for a series' line-family marks, or `undefined` for a solid
+ * stroke. Undefined for every series inside the validated 8 slots, so no v0.2
+ * or v0.3 chart changes appearance.
+ */
+export function seriesDash(s: NormalizedSeries, theme: Theme): number[] | undefined {
+  const c = seriesCycle(s, theme);
+  if (c === 0) return undefined;
+  const pattern = SERIES_DASH_CYCLE[c % SERIES_DASH_CYCLE.length] ?? [];
+  return pattern.length > 0 ? [...pattern] : undefined;
+}
+
+/** Marker shape for a series (circle for every series inside the 8 slots). */
+export function seriesMarker(s: NormalizedSeries, theme: Theme): MarkerShape {
+  const c = seriesCycle(s, theme);
+  return SERIES_MARKER_CYCLE[c % SERIES_MARKER_CYCLE.length] ?? 'circle';
+}
+
+/**
+ * ONE warning per chart instance when the series count outruns the validated
+ * palette. Keyed on the instance's own `paletteSlots` map, which `buildModel`
+ * already threads through for exactly this kind of per-chart identity.
+ */
+const overflowWarned = new WeakSet<Map<string, number>>();
+
+function warnPaletteOverflow(
+  opts: ResolvedOptions,
+  paletteSlots: Map<string, number>,
+  slotCount: number,
+  seriesCount: number,
+): void {
+  if (overflowWarned.has(paletteSlots)) return;
+  overflowWarned.add(paletteSlots);
+  const named = opts.title ? `"${opts.title}" (${opts.type})` : `${opts.type}`;
+  // eslint-disable-next-line no-console
+  console.warn(
+    `@chartcraft/core: ${named} chart has ${seriesCount} series but the validated palette has ` +
+      `${slotCount} colorblind-safe slots. Series ${slotCount + 1}+ reuse the hue order and are ` +
+      `separated by a dash pattern and marker shape instead of a new color. That is a fallback, ` +
+      `not a design: fold the tail into an "Other" series or split the chart into small multiples.`,
+  );
 }
 
 /** Kinds whose value axis is anchored at zero. */
@@ -382,6 +491,7 @@ export function buildModel(
     hasCategories: categories !== null,
     sampleXs,
     forceCategory: needs.xScale === 'band',
+    forceTime: needs.xScale === 'time',
   });
 
   // Category axis: ensure categories exist (index-based fallback).
@@ -423,6 +533,25 @@ export function buildModel(
     return ns;
   });
 
+  // Past the validated palette the hue order REPEATS, with a dash pattern and
+  // marker shape carrying the difference. Say so once — a caller who did not
+  // realize they crossed the line should hear it, and a caller who did should
+  // not be nagged on every frame. The highest slot in use is computed first so
+  // the theme is only resolved when an overflow is even possible: `buildModel`
+  // runs on every update and every zoom gesture, and it has no theme of its own.
+  if (!overflowWarned.has(paletteSlots)) {
+    let maxSlot = -1;
+    for (const s of series) {
+      if (!s.colorOverride && s.paletteIndex > maxSlot) maxSlot = s.paletteIndex;
+    }
+    if (maxSlot >= 1) {
+      const slotCount = resolveTheme(opts.theme).series.length;
+      if (slotCount > 0 && maxSlot >= slotCount) {
+        warnPaletteOverflow(opts, paletteSlots, slotCount, series.length);
+      }
+    }
+  }
+
   // Downsample (line/scatter kinds and unstacked areas, continuous x, above
   // threshold). v0.3: when a zoom VIEWPORT is set, downsampling runs against
   // the visible window instead of the whole series — so zooming into 1M points
@@ -439,8 +568,16 @@ export function buildModel(
         DOWNSAMPLE_KINDS.includes(s.kind) &&
         !(stacked && STACKING_KINDS.includes(s.kind));
       if (!eligible || s.points.length <= threshold) continue;
-      const source = window ? windowNormalized(s.points, window[0], window[1]) : s.points;
-      s.points = source.length > threshold ? downsampleNormalized(source, threshold) : source;
+      // Retain the full, un-windowed series BEFORE either lossy step, so the
+      // accessible table and `exportData()` can serve every row the caller gave
+      // us (see `NormalizedSeries.sourcePoints`).
+      const all = s.points;
+      const source = window ? windowNormalized(all, window[0], window[1]) : all;
+      const drawn = source.length > threshold ? downsampleNormalized(source, threshold) : source;
+      if (drawn !== all) {
+        s.sourcePoints = all;
+        s.points = drawn;
+      }
     }
   }
 
@@ -465,7 +602,44 @@ export function buildModel(
     }
   }
 
-  // Value domain: stacked group extents + raw extents of unstacked series.
+  const yDomain = valueExtentOf(visible, stackExtents);
+  const xDomain = continuousX ? continuousXExtentOf(visible) : null;
+  const maxLen = series.reduce((m, s) => Math.max(m, s.points.length), 0);
+
+  const model: DataModel = {
+    type,
+    series,
+    categories,
+    xType,
+    stacked,
+    horizontal,
+    xDomain,
+    yDomain,
+    valueDomainExact: false,
+    bandByPosition: needs.bandIndex === 'position',
+    maxLen,
+    viewport,
+  };
+
+  applyDomainExtensions(model, opts, def);
+  return model;
+}
+
+// ---------------------------------------------------------------- domain math
+//
+// Extracted from `buildModel` so the incremental re-window path (`rewindowModel`)
+// computes the SAME domains by the same code. A zoom that widened its y-axis by
+// a rounding rule the full build did not apply would be a bug nobody could see.
+
+/**
+ * The value extent over the visible series: stacked-group extents plus the raw
+ * extents of every unstacked series, then the zero anchor and the degenerate
+ * widening.
+ */
+function valueExtentOf(
+  visible: readonly NormalizedSeries[],
+  stackExtents: readonly [number, number][],
+): [number, number] {
   let min = Infinity;
   let max = -Infinity;
   for (const s of visible) {
@@ -510,49 +684,39 @@ export function buildModel(
     max = max <= 0 ? (max < 0 ? 0 : 1) : max + (max - min);
     if (min === max) max = min + 1;
   }
-  const yDomain: [number, number] = [min, max];
+  return [min, max];
+}
 
-  // Continuous x extent.
-  let xDomain: [number, number] | null = null;
-  if (continuousX) {
-    let xMin = Infinity;
-    let xMax = -Infinity;
-    for (const s of visible) {
-      for (const p of s.points) {
-        if (p.xv === null) continue;
-        if (p.xv < xMin) xMin = p.xv;
-        if (p.xv > xMax) xMax = p.xv;
-      }
+/** The continuous x extent over the visible series' DRAWN points. */
+function continuousXExtentOf(visible: readonly NormalizedSeries[]): [number, number] {
+  let xMin = Infinity;
+  let xMax = -Infinity;
+  for (const s of visible) {
+    for (const p of s.points) {
+      if (p.xv === null) continue;
+      if (p.xv < xMin) xMin = p.xv;
+      if (p.xv > xMax) xMax = p.xv;
     }
-    if (!Number.isFinite(xMin)) {
-      xMin = 0;
-      xMax = 1;
-    }
-    if (xMin === xMax) xMax = xMin + 1;
-    xDomain = [xMin, xMax];
   }
+  if (!Number.isFinite(xMin)) {
+    xMin = 0;
+    xMax = 1;
+  }
+  if (xMin === xMax) xMax = xMin + 1;
+  return [xMin, xMax];
+}
 
-  const maxLen = series.reduce((m, s) => Math.max(m, s.points.length), 0);
-
-  const model: DataModel = {
-    type,
-    series,
-    categories,
-    xType,
-    stacked,
-    horizontal,
-    xDomain,
-    yDomain,
-    valueDomainExact: false,
-    bandByPosition: needs.bandIndex === 'position',
-    maxLen,
-    viewport,
-  };
-
-  // v0.3: the TYPE may widen the value domain first (`extendValueDomain` — the
-  // definition-side counterpart of `Decorator.extendYDomain`): a bullet's
-  // qualitative ranges/target, a boxplot's whiskers and outliers read from RAW
-  // number[] samples, a waterfall's running totals. Union only, never narrows.
+/**
+ * The two value-domain extension stages, applied in order and in place.
+ *
+ * v0.3: the TYPE may widen the value domain first (`extendValueDomain` — the
+ * definition-side counterpart of `Decorator.extendYDomain`): a bullet's
+ * qualitative ranges/target, a boxplot's whiskers and outliers read from RAW
+ * number[] samples, a waterfall's running totals. Union only, never narrows.
+ * Then pipeline-level decorators may widen it further (error bars are "included
+ * in the y-domain"). With no decorator registered the second stage is a no-op.
+ */
+function applyDomainExtensions(model: DataModel, opts: ResolvedOptions, def: ChartTypeDefinition): void {
   const typeExt = def.extendValueDomain?.(model, opts) ?? null;
   if (typeExt) {
     const ext = Array.isArray(typeExt) ? { domain: typeExt } : typeExt;
@@ -564,12 +728,83 @@ export function buildModel(
     if (ext.exact === true) model.valueDomainExact = true;
   }
 
-  // Then pipeline-level decorators may widen it further (error bars are
-  // "included in the y-domain"). With no decorator registered this is a no-op.
   const before = model.yDomain;
   const extended = extendYDomainForDecorators(before, model, opts);
   if (extended[0] !== before[0] || extended[1] !== before[1]) model.yDomain = extended;
+}
 
+/**
+ * Re-window an EXISTING model for a new zoom viewport, without re-ingesting the
+ * caller's data (quality audit E-7).
+ *
+ * `zoomTo` used to re-run `buildModel` over the whole series, so every wheel
+ * gesture paid for a full normalize pass: 202 ms per gesture at 1M points on the
+ * audit's host, which drops frames badly on a chart whose headline number is
+ * exactly that. Nothing about a viewport change invalidates NORMALIZATION — the
+ * points, their identities, the palette slots, the categories and the x-type are
+ * all the same objects. Only which points are DRAWN moves, and the full set is
+ * already retained on `NormalizedSeries.sourcePoints` (audit fix A-1).
+ *
+ * So this re-slices from the retained points and recomputes the domains through
+ * the same helpers `buildModel` uses. It returns `null` — "fall back to a full
+ * build" — for the cases where re-windowing is not obviously equivalent:
+ *
+ *   * a STACKED model, whose `y0`/`y1` are index-aligned to the points a stack
+ *     pass produced (windowing one member would desynchronize the stack);
+ *   * a non-continuous x axis, where `Layout.viewport` is informational only
+ *     (deviation 22) — nothing to re-slice.
+ *
+ * The caller keeps the returned model as the new base: `sourcePoints` always
+ * carries the FULL series, so successive gestures never compound a narrowing.
+ */
+export function rewindowModel(
+  base: DataModel,
+  opts: ResolvedOptions,
+  viewportIn: Viewport | null,
+): DataModel | null {
+  if (base.stacked) return null;
+  const def = chartDef(base.type);
+  const needs = def.needs;
+  const viewport = normalizeViewport(viewportIn);
+  const continuousX = base.xType === 'linear' || base.xType === 'time' || base.xType === 'log';
+  if (!continuousX) return null;
+
+  const window = viewport?.x ?? null;
+  const downsampling = (needs.downsample ?? false) && opts.downsample.enabled;
+  const threshold = opts.downsample.threshold;
+
+  const series = base.series.map((s) => {
+    const all = s.sourcePoints ?? s.points;
+    const eligible =
+      downsampling &&
+      s.kind !== null &&
+      DOWNSAMPLE_KINDS.includes(s.kind) &&
+      all.length > threshold;
+    if (!eligible) {
+      if (s.points === all && s.sourcePoints === undefined) return s;
+      const { sourcePoints: _drop, ...rest } = s;
+      return { ...rest, points: all } as NormalizedSeries;
+    }
+    const source = window ? windowNormalized(all, window[0], window[1]) : all;
+    const drawn = source.length > threshold ? downsampleNormalized(source, threshold) : source;
+    if (drawn === all) {
+      const { sourcePoints: _drop, ...rest } = s;
+      return { ...rest, points: all } as NormalizedSeries;
+    }
+    return { ...s, points: drawn, sourcePoints: all };
+  });
+
+  const visible = series.filter((s) => s.visible);
+  const model: DataModel = {
+    ...base,
+    series,
+    yDomain: valueExtentOf(visible, []),
+    xDomain: continuousXExtentOf(visible),
+    valueDomainExact: false,
+    maxLen: series.reduce((m, s) => Math.max(m, s.points.length), 0),
+    viewport,
+  };
+  applyDomainExtensions(model, opts, def);
   return model;
 }
 

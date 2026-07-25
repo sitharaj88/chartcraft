@@ -6,7 +6,7 @@
 export { createChart, version } from './chart';
 
 // Themes & palette
-export { lightTheme, darkTheme, categoricalPalette, sequentialPalette } from './theme';
+export { lightTheme, darkTheme, categoricalPalette, sequentialPalette, sequentialRampFor } from './theme';
 
 // Utilities (exported for advanced users & wrappers)
 export { LinearScale, TimeScale, BandScale, LogScale } from './scales';

@@ -3,8 +3,9 @@
  * with a 2px line on the upper edge and optional markers, same as line.
  */
 import type { RenderContext } from '../layout';
-import { seriesColor } from '../model';
+import { seriesColor, seriesDash, seriesMarker } from '../model';
 import { areaPath, linePath } from './curves';
+import { drawMarker } from './markers';
 import { MARKER_RADIUS, MARKER_RING, markersVisible } from './line';
 
 export const AREA_FILL_ALPHA = 0.24;
@@ -19,16 +20,21 @@ export function renderAreaKind(ctx: RenderContext, indices: readonly number[]): 
       const pts = pos[si];
       if (!pts || pts.length === 0) continue;
       const color = seriesColor(s, theme);
+      // Composite encoding past palette slot 8 — see charts/line.ts.
+      const dash = seriesDash(s, theme);
+      const shape = seriesMarker(s, theme);
       const fill = areaPath(pts, s.curve);
       if (fill.length > 0) r.path(fill, { fill: color, alpha: AREA_FILL_ALPHA });
       const stroke = linePath(pts, s.curve);
       if (stroke.length > 0) {
-        r.path(stroke, { stroke: { color, width: s.lineWidth, join: 'round', cap: 'round' } });
+        r.path(stroke, {
+          stroke: { color, width: s.lineWidth, join: 'round', cap: 'round', ...(dash ? { dash } : {}) },
+        });
       }
       if (markersVisible(s, pts.length)) {
         for (const p of pts) {
           if (!p) continue;
-          r.circle(p.x, p.y, MARKER_RADIUS, {
+          drawMarker(r, shape, p.x, p.y, MARKER_RADIUS, {
             fill: color,
             stroke: { color: theme.surface, width: MARKER_RING },
           });
@@ -37,7 +43,7 @@ export function renderAreaKind(ctx: RenderContext, indices: readonly number[]): 
       if (hover && (hover.si === si || ctx.opts.tooltip.shared)) {
         const hp = pts[hover.pi];
         if (hp) {
-          r.circle(hp.x, hp.y, MARKER_RADIUS + 1.5, {
+          drawMarker(r, shape, hp.x, hp.y, MARKER_RADIUS + 1.5, {
             fill: color,
             stroke: { color: theme.surface, width: MARKER_RING },
           });

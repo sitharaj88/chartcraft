@@ -86,7 +86,7 @@ export interface ChartTypeDefinition {
   resolveLegend?(ctx: GeomContext): boolean | null;   // measured legend policy
   legendItems(ctx): LegendItem[];
   legendCustomEl?(ctx, doc): HTMLElement | null;  // gradient scale bars
-  a11yTable(ctx): A11yTableSpec;        // columns + rows, shape-appropriate
+  a11yTable(ctx, opts?): A11yTableSpec; // columns + rows, shape-appropriate
   a11yDescription?(ctx: GeomContext): string | null;  // prose, not a table
   keyboardNav(model): NavContext;       // natural reading order for arrows
   announce?(ctx, pos): string | null;   // optional custom announcement
@@ -108,8 +108,8 @@ resolveOptions        option policy
 Stage notes:
 
 - `needs` — declare, don't implement: `cartesianAxes`, `axisChrome`, `axes`,
-  `xScale: 'band' | 'auto'`, `bandIndex`, `baseKind`, `combo`, `rangeFromData`,
-  `stacking`, `horizontal`, `downsample`, `triple`. Example: boxplot wants
+  `xScale: 'band' | 'auto' | 'time'`, `bandIndex`, `baseKind`, `combo`,
+  `rangeFromData`, `stacking`, `horizontal`, `downsample`, `triple`. Example: boxplot wants
   `{ cartesianAxes: true, xScale: 'band' }`; heatmap/treemap/gauge want
   `{ cartesianAxes: false }` and compute their own geometry from `layout.plot`.
 
@@ -137,6 +137,23 @@ Stage notes:
     renders as the `'rangearea'` band kind whenever its data carries a full
     `low`/`high` pair. `rangearea` declares it; an explicit `type` still wins.
 
+  And one added in v0.3.2:
+
+  - **`xScale: 'time'`** — this type's x is INHERENTLY temporal. `inferXType`
+    honours the declaration, so a bare number is epoch milliseconds BY
+    DECLARATION — which is the only safe basis, because integer `x` values are
+    legal everywhere else and "a big number is probably a date" is a guess.
+    `candlestick`, `ohlc` and `gantt` declare it. The point of declaring rather
+    than patching one formatter is that everything downstream then agrees: the
+    tick labels (a real `TimeScale`), the tooltip header, the a11y table's time
+    column and the keyboard announcement. Ordering: an explicit caller
+    `xAxis.type` wins, then a band declaration, then genuinely categorical data
+    (supplied `categories`, string `x`), then this. Format an x value with
+    `formatTemporal(x, model.xType === 'time', spanMs)` — never by sniffing the
+    magnitude yourself. Do NOT write `resolved.xAxis.type` from
+    `resolveOptions`: axis options belong to the caller, and `getOptions()` must
+    round-trip what they configured.
+
   `axes` is also how the pipeline decides which axis formats what
   (`valueAxisOf` / `categoryAxisOf` in `registry.ts`): declare it and
   `formattedX` / `formattedY` come out right with no tooltip post-processing. It
@@ -155,9 +172,41 @@ Stage notes:
 - `decorations(ctx, layer)` — **optional** overlay stage, see below.
 - `hitTest` — hit targets larger than marks (`HIT_RADIUS` = 24px; helpers
   `nearestPoint`, `nearestByX`, `sliceAt` in `interaction/hittest.ts`).
-- `a11yTable` — first column is the row-header column. Use shape-appropriate
-  columns (OHLC: open/high/low/close; treemap: indented label + value +
-  share). The pipeline builds the DOM, the caption AND `exportData()`.
+- `a11yTable(ctx, opts?)` — first column is the row-header column. Use
+  shape-appropriate columns (OHLC: open/high/low/close; treemap: indented label
+  + value + share). The pipeline builds the DOM, the caption AND `exportData()`.
+
+  **`opts.limit` (v0.3.2) is an optional row budget, and honouring it is
+  optional.** The DOM path asks for the resolved `a11y.tableMaxRows` (all it can
+  materialize anyway); `exportData()` asks for everything, always — an export
+  that silently truncates is a data-integrity bug. Whatever you return is
+  sliced by the pipeline, which also fills in `A11yTableSpec.total`, so a
+  definition that ignores `limit` behaves exactly as it always did.
+
+  Honour it when a row is genuinely expensive to build — one row object with
+  formatted string cells per DATUM, on a type that can carry a million of them.
+  Building the complete spec eagerly on mount cost +565 ms at 100k points and
+  +4.2 s at 1M before this existed, all of it synchronous main-thread work to
+  produce rows the DOM then threw away. It is pointless for a type whose row
+  count is bounded by its own shape (a gauge has one row; a sankey has nodes +
+  links; a heatmap has one row per series).
+
+  The shape, when you do honour it:
+
+  ```ts
+  a11yTable(ctx, tableOpts): A11yTableSpec {
+    const budget = a11yRowBudget(tableOpts);      // Infinity when unbounded
+    const built = Math.min(ctx.model.maxLen, budget);
+    const rows = [];
+    for (let i = 0; i < built; i++) rows.push(/* ... */);
+    // `total` is what you WOULD have built. Omitting it makes the caption and
+    // the accessible description report the truncated count as the whole truth.
+    return { columns, rows, total: ctx.model.maxLen };
+  }
+  ```
+
+  Adopted so far by the shared cartesian table (line/area/bar/scatter and the
+  types built on it), `candlestick`/`ohlc`, `bubble` and `rangearea`.
 - `keyboardNav` — `{ seriesCount, isVisible, pointCount }` consumed by the
   pure `navigate()` state machine. Map your natural reading order onto
   (si, pi): heatmap = row-major cells (si = row, pi = column), funnel =

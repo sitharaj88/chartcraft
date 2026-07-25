@@ -105,7 +105,13 @@ describe('ohlc — shared financial behavior', () => {
     const head = [...el.querySelectorAll('.chartcraft-a11y-table thead th')].map((th) => th.textContent);
     expect(head).toEqual(['Time', 'Open', 'High', 'Low', 'Close']);
     const rows = el.querySelectorAll('.chartcraft-a11y-table tbody tr');
-    expect([...rows[2]!.children].map((c) => c.textContent)).toEqual(['3', '103', '108', '99', '107']);
+    const cells = [...rows[2]!.children].map((c) => c.textContent);
+    expect(cells.slice(1)).toEqual(['103', '108', '99', '107']);
+    // v0.3.2 (E-5): ohlc DECLARES a time axis, so a numeric x is epoch ms and
+    // the `Time` column reads as a time instead of as the raw number `'3'` —
+    // the assertion this replaces encoded audit finding A-7.
+    expect(cells[0]).not.toBe('3');
+    expect(cells[0]).toMatch(/\d\d:\d\d/);
   });
 
   it('keyboard navigation fires pointenter and announces OHLC', () => {

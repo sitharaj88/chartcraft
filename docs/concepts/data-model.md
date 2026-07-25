@@ -198,11 +198,12 @@ silently dropped edge is a wrong picture), and a `sankey` cycle throws too.
 
 ::: tip These two types normalize your input
 `sankey`, `gantt` and `network` rewrite their resolved `data` into one synthetic
-series — marks in reading order, tasks in row order, nodes by degree — so every
+series — marks in reading order, tasks in row order, each network node followed
+by its own links — so every
 mark has a real backing point and events, tooltips, focus and the a11y layer work
 with no per-type special cases. Your objects are never mutated, but
 `getOptions().data` reports the normalized form, and `PointEvent.dataIndex` is
-that reading order (for `network`, a degree rank).
+that reading order.
 :::
 
 ### Other v0.3 object fields

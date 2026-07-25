@@ -2,7 +2,8 @@
  * Scatter marks: >= 8px diameter circles with a 2px surface ring.
  */
 import type { RenderContext } from '../layout';
-import { seriesColor } from '../model';
+import { seriesColor, seriesMarker } from '../model';
+import { drawMarker } from './markers';
 import { MARKER_RADIUS, MARKER_RING } from './line';
 
 export function renderScatterKind(ctx: RenderContext, indices: readonly number[]): void {
@@ -16,11 +17,14 @@ export function renderScatterKind(ctx: RenderContext, indices: readonly number[]
       const pts = pos[si];
       if (!pts) continue;
       const color = seriesColor(s, theme);
+      // Composite encoding past palette slot 8 — see charts/line.ts. A scatter
+      // has no line to dash, so shape is the whole of its second channel.
+      const shape = seriesMarker(s, theme);
       pts.forEach((p, pi) => {
         if (!p) return;
         const hovered = hover !== null && hover.si === si && hover.pi === pi;
         const alpha = hover && !hovered ? 0.55 : 1;
-        r.circle(p.x, p.y, hovered ? MARKER_RADIUS + 2 : MARKER_RADIUS, {
+        drawMarker(r, shape, p.x, p.y, hovered ? MARKER_RADIUS + 2 : MARKER_RADIUS, {
           fill: s.points[pi]?.color ?? color,
           stroke: { color: theme.surface, width: MARKER_RING },
           alpha,

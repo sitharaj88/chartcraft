@@ -27,6 +27,7 @@ import { BandScale } from '../scales/band';
 import { formatValue } from '../util';
 import { HIT_RADIUS, indicesAtX, nearestByX, nearestPoint } from '../interaction/hittest';
 import type { A11yTableSpec } from '../a11y';
+import { a11yRowBudget } from '../a11y';
 import type { LegendItem } from '../components/legend';
 import type { NavContext } from '../a11y/keyboard';
 import { renderAreaKind } from './area';
@@ -343,13 +344,22 @@ export function makeCartesianDefinition(cfg: CartesianConfig): ChartTypeDefiniti
       }));
     },
 
-    a11yTable(ctx): A11yTableSpec {
+    /**
+     * v0.3.2 (E-8): this is THE expensive table — one row object with a
+     * formatted string per series, per DATUM, on the types that carry a million
+     * of them. It honours `limit`, so mounting a 1M-point line no longer builds
+     * a million rows to display the first two thousand. `total` keeps the count
+     * true for the caption and the accessible description.
+     */
+    a11yTable(ctx, tableOpts): A11yTableSpec {
       const m = ctx.model;
       const o = ctx.opts;
       const xHead =
         o.xAxis.label ?? (m.xType === 'category' ? 'Category' : m.xType === 'time' ? 'Time' : 'X');
       const rows: A11yTableSpec['rows'] = [];
-      for (let i = 0; i < m.maxLen; i++) {
+      const budget = a11yRowBudget(tableOpts);
+      const built = Math.min(m.maxLen, budget);
+      for (let i = 0; i < built; i++) {
         const cat = m.categories?.[i];
         const xVal = cat !== undefined ? cat : (m.series[0]?.points[i]?.x ?? i);
         rows.push({
@@ -360,7 +370,7 @@ export function makeCartesianDefinition(cfg: CartesianConfig): ChartTypeDefiniti
           }),
         });
       }
-      return { columns: [xHead, ...m.series.map((s) => s.name)], rows };
+      return { columns: [xHead, ...m.series.map((s) => s.name)], rows, total: m.maxLen };
     },
 
     keyboardNav(model): NavContext {

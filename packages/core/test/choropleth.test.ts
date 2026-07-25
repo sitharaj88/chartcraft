@@ -82,8 +82,16 @@ describe('choropleth pure helpers', () => {
   });
 
   it('ramp defaults to the sequential palette and honors an override', () => {
-    expect(choroplethRamp({})).toEqual(sequentialPalette);
-    expect(choroplethRamp({ choropleth: { geojson, ramp: ['#000000', '#ffffff'] } })).toEqual([
+    expect(choroplethRamp({}, 'light')).toEqual(sequentialPalette);
+    expect(choroplethRamp({ choropleth: { geojson, ramp: ['#000000', '#ffffff'] } }, 'light')).toEqual([
+      '#000000',
+      '#ffffff',
+    ]);
+  });
+
+  it('REVERSES the default ramp on a dark surface, and never a custom one', () => {
+    expect(choroplethRamp({}, 'dark')).toEqual([...sequentialPalette].reverse());
+    expect(choroplethRamp({ choropleth: { geojson, ramp: ['#000000', '#ffffff'] } }, 'dark')).toEqual([
       '#000000',
       '#ffffff',
     ]);

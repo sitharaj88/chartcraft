@@ -19,6 +19,7 @@
 import type { TooltipPoint } from '../../types';
 import type { ChartTypeDefinition } from '../registry';
 import type { A11yTableSpec } from '../../a11y';
+import { a11yRowBudget } from '../../a11y';
 import type { NormalizedPoint } from '../../data/normalize';
 import { bandIndexFor } from '../../model';
 import { rangeOf } from '../../data/normalize';
@@ -76,7 +77,8 @@ export const rangeareaDefinition: ChartTypeDefinition = {
   // reads three-element tuples as `[x, low, high]`.
   needs: { ...base.needs, triple: 'range', rangeFromData: true },
 
-  a11yTable(ctx): A11yTableSpec {
+  /** Honours `limit` (v0.3.2, E-8): one row per DATUM, so it can be huge. */
+  a11yTable(ctx, tableOpts): A11yTableSpec {
     const m = ctx.model;
     const o = ctx.opts;
     const xHead = o.xAxis.label ?? (m.xType === 'category' ? 'Category' : m.xType === 'time' ? 'Time' : 'X');
@@ -93,7 +95,8 @@ export const rangeareaDefinition: ChartTypeDefinition = {
       }
     });
     const rows: A11yTableSpec['rows'] = [];
-    for (let i = 0; i < m.maxLen; i++) {
+    const built = Math.min(m.maxLen, a11yRowBudget(tableOpts));
+    for (let i = 0; i < built; i++) {
       const cat = m.categories?.[i];
       const xVal = cat !== undefined ? cat : (m.series[0]?.points[i]?.x ?? i);
       const cells: string[] = [];
@@ -109,7 +112,7 @@ export const rangeareaDefinition: ChartTypeDefinition = {
       });
       rows.push({ header: formatValue(xVal), cells });
     }
-    return { columns, rows };
+    return { columns, rows, total: m.maxLen };
   },
 
   announce(ctx, pos): string | null {

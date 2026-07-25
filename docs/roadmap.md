@@ -15,6 +15,16 @@ gantt, choropleth and network. Every one ships with the full shared feature set
 reduced motion, resize — and its own [example page](examples/index.md) with an
 honest "when *not* to use this" section.
 
+**Audit-driven hardening.** An adversarial [quality audit](https://github.com/OWNER/charts/blob/main/QUALITY-AUDIT.md)
+of all 39 types drove a round of fixes that shipped in 0.3: the accessible table
+and `exportData()` now carry the **full** series rather than the downsampled
+render set; sequential ramps are scheme-aware, so the highest-magnitude cell
+clears 13.16:1 on dark instead of vanishing at 1.46:1; candlesticks encode
+rise/fall with **fill** as well as colour; `forced-colors: active` is genuinely
+implemented; series past palette slot 8 gain a dash/marker channel; network
+links became reachable by assistive tech; and `zoomTo` at 1M points went
+**76.8 ms → 9.9 ms** while a 1M-point mount went **4.70 s → 1.21 s**.
+
 **Six cross-cutting features**, each with a page of its own:
 
 - [Error bars](features/error-bars.md) — the v0.2 roadmap's one open chart-type
@@ -120,8 +130,11 @@ For clarity, some things stay out regardless of demand:
   scale as its bars, or in a small multiple.
 - **Runtime dependencies in core** — zero now, zero later. That is why no map
   topology is bundled: `choropleth.geojson` is always yours.
-- **Unvalidated palette growth** — no 9th categorical slot; beyond 8, design
-  changes (fold to "Other", small multiples), not color generation.
+- **Unvalidated palette growth** — no 9th categorical slot, ever. Beyond 8 the
+  hue order is reused with a **composite encoding** (dash pattern + marker shape)
+  and a one-time console recommendation; the real fix is a design change on the
+  caller's side (fold the tail into "Other", or small multiples). The library
+  will not generate a colour, and it will not fold your data for you.
 - **Radius-linear encodings** — rose radius, bubble and network node radius are
   always √value. Area-true or not at all.
 - **A project planner** — the gantt type draws spans. Dependencies, critical paths

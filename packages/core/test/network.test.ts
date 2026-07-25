@@ -197,32 +197,53 @@ describe('network legend (groups)', () => {
 });
 
 describe('network a11y, keyboard & tooltip', () => {
-  it('a11y table is node / group / degree / value in degree order', () => {
+  /**
+   * v0.3.2 (E-4): the table and the keyboard walk cover nodes AND links, the
+   * way sankey's always have. The assertions this replaces pinned the
+   * node-only spec — four rows for four nodes and five links — which is
+   * precisely the gap the architect's ruling closes; the contract's `network`
+   * row was amended with it.
+   */
+  it('a11y table is node, then that node\'s links, in degree order', () => {
     const { el } = mountNet();
     const table = el.querySelector('.chartcraft-a11y-table table') as HTMLTableElement;
     expect([...table.querySelectorAll('thead th')].map((th) => th.textContent)).toEqual([
-      'Node',
+      'Node / link',
       'Group',
       'Degree',
+      'Source',
+      'Target',
       'Value',
     ]);
     const rows = [...table.querySelectorAll('tbody tr')].map((tr) => [...tr.children].map((c) => c.textContent));
     expect(rows).toEqual([
-      ['Beta', 'Two', '3', '4'],
-      ['Alpha', 'One', '2', '16'],
-      ['Gamma', 'One', '2', '1'],
-      ['Delta', '—', '1', '9'],
+      ['Beta', 'Two', '3', '—', '—', '4'],
+      ['  Beta → Gamma', '—', '—', 'Beta', 'Gamma', '—'],
+      ['  Beta → Delta', '—', '—', 'Beta', 'Delta', '—'],
+      ['Alpha', 'One', '2', '—', '—', '16'],
+      ['  Alpha → Beta', '—', '—', 'Alpha', 'Beta', '—'],
+      ['  Alpha → Gamma', '—', '—', 'Alpha', 'Gamma', '—'],
+      ['Gamma', 'One', '2', '—', '—', '1'],
+      ['Delta', '—', '1', '—', '—', '9'],
     ]);
   });
 
   it('exportData mirrors the a11y table exactly', () => {
     const { chart } = mountNet();
     expect(chart.exportData()).toBe(
-      'Node,Group,Degree,Value\nBeta,Two,3,4\nAlpha,One,2,16\nGamma,One,2,1\nDelta,—,1,9',
+      'Node / link,Group,Degree,Source,Target,Value\n' +
+        'Beta,Two,3,—,—,4\n' +
+        '  Beta → Gamma,—,—,Beta,Gamma,—\n' +
+        '  Beta → Delta,—,—,Beta,Delta,—\n' +
+        'Alpha,One,2,—,—,16\n' +
+        '  Alpha → Beta,—,—,Alpha,Beta,—\n' +
+        '  Alpha → Gamma,—,—,Alpha,Gamma,—\n' +
+        'Gamma,One,2,—,—,1\n' +
+        'Delta,—,1,—,—,9',
     );
   });
 
-  it('keyboard walks nodes by DEGREE descending and announces group/degree', () => {
+  it('keyboard walks each node by DEGREE descending, then that node\'s links', () => {
     const { el, chart } = mountNet();
     const enters: { dataIndex: number; y: number | null }[] = [];
     chart.on('pointenter', (e) => enters.push({ dataIndex: e.dataIndex, y: e.y }));
@@ -232,10 +253,15 @@ describe('network a11y, keyboard & tooltip', () => {
     expect(enters.at(-1)).toEqual({ dataIndex: 0, y: 4 }); // Beta, degree 3
     expect(region.textContent).toBe('Beta: 4. Two, degree 3, node 1 of 4.');
     key(el, 'ArrowRight');
-    expect(enters.at(-1)).toEqual({ dataIndex: 1, y: 16 }); // Alpha, degree 2
+    expect(enters.at(-1)!.dataIndex).toBe(1); // Beta's first outgoing link
+    expect(region.textContent).toBe('Beta to Gamma: no value. Link 1 of 2 from Beta.');
+    key(el, 'ArrowRight');
+    expect(region.textContent).toBe('Beta to Delta: no value. Link 2 of 2 from Beta.');
+    key(el, 'ArrowRight');
+    expect(enters.at(-1)).toEqual({ dataIndex: 3, y: 16 }); // Alpha, degree 2
     expect(region.textContent).toBe('Alpha: 16. One, degree 2, node 2 of 4.');
     key(el, 'End');
-    expect(enters.at(-1)).toEqual({ dataIndex: 3, y: 9 }); // Delta, degree 1
+    expect(enters.at(-1)).toEqual({ dataIndex: 7, y: 9 }); // Delta, degree 1
     expect(region.textContent).toBe('Delta: 9. degree 1, node 4 of 4.');
   });
 

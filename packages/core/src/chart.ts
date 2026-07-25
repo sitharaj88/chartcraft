@@ -26,11 +26,13 @@ import {
   bandIndexFor,
   buildModel,
   resolveOptions,
+  rewindowModel,
   seriesColor,
+  seriesDash,
   type DataModel,
   type ResolvedOptions,
 } from './model';
-import { resolveTheme, watchColorScheme } from './theme';
+import { forcedColorsActive, forcedColorsTheme, resolveTheme, watchColorScheme, watchForcedColors } from './theme';
 import { CanvasRenderer } from './render/canvas';
 import type { Renderer } from './render/renderer';
 import {
@@ -75,12 +77,12 @@ import {
 } from './decorate';
 import { a11yTableToCSV, a11yTableToJSON, canvasToBlob } from './export';
 import { registerBuiltinDecorators } from './features';
-import { A11Y_TABLE_MAX_ROWS, Announcer, buildDataTable, generateAriaLabel, visuallyHide } from './a11y';
+import { Announcer, applyTableLimit, buildDataTable, generateAriaLabel, visuallyHide } from './a11y';
 import { navigate, type NavPosition } from './a11y/keyboard';
 import { Animator, lerp, prefersReducedMotion } from './animation';
-import { caf, deepMerge, formatValue, raf, uid } from './util';
+import { caf, deepMerge, formatTemporal, formatValue, raf, uid } from './util';
 
-export const version = '0.2.0';
+export const version = '0.3.0';
 
 type RenderReason = ChartEventMap['render']['reason'];
 
@@ -133,8 +135,8 @@ class ChartImpl implements Chart {
   private viewport: Viewport | null = null;
   /** Cached FULL-fidelity model for the a11y table + exportData (see a11yModel). */
   private a11yModelCache: DataModel | null = null;
-  /** Cached table spec built from it (see a11yTableSpec). */
-  private tableSpecCache: ReturnType<ChartTypeDefinition['a11yTable']> | null = null;
+  /** Cached table specs built from it, keyed by row limit (see a11yTableSpec). */
+  private tableSpecCache = new Map<number, ReturnType<ChartTypeDefinition['a11yTable']>>();
   /** The DOM table needs rebuilding (data/visibility/table-mode changed). */
   private tableDirty = true;
   /** `a11y.table` mode the mounted DOM table was built for. */
@@ -146,6 +148,7 @@ class ChartImpl implements Chart {
 
   private ro: ResizeObserver | null = null;
   private unwatchScheme: () => void = () => {};
+  private unwatchForced: () => void = () => {};
   private animator = new Animator();
   private hover: HoverState | null = null;
   private focus: NavPosition | null = null;
@@ -163,7 +166,7 @@ class ChartImpl implements Chart {
     this.el = container;
     this.raw = deepMerge({} as ChartOptions, options);
     this.opts = resolveOptions(this.raw);
-    this.theme = resolveTheme(this.opts.theme);
+    this.theme = this.themeFor(this.opts);
     this.descId = uid('chartcraft-desc');
 
     const doc = container.ownerDocument;
@@ -219,6 +222,7 @@ class ChartImpl implements Chart {
     }
 
     this.watchThemeIfAuto();
+    this.watchForcedColorsAlways();
 
     this.model = buildModel(this.opts, this.paletteSlots, this.viewport);
     this.refresh('init', false);
@@ -275,7 +279,7 @@ class ChartImpl implements Chart {
     if (this.destroyed) return;
     const nextRaw = deepMerge(this.raw, partial);
     const nextOpts = resolveOptions(nextRaw);
-    const nextTheme = resolveTheme(nextOpts.theme);
+    const nextTheme = this.themeFor(nextOpts);
 
     // New data (or a new type) invalidates a zoom window expressed in the old
     // data's units, so the viewport resets — every other update keeps it.
@@ -324,6 +328,7 @@ class ChartImpl implements Chart {
     this.ro?.disconnect();
     this.ro = null;
     this.unwatchScheme();
+    this.unwatchForced();
     this.canvas.removeEventListener('pointermove', this.onPointerMove as EventListener);
     this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
     this.canvas.removeEventListener('click', this.onClick);
@@ -358,7 +363,8 @@ class ChartImpl implements Chart {
    * source of truth for "what this chart's data looks like as a table".
    */
   exportData(opts?: { format?: 'csv' | 'json' }): string {
-    const spec = this.a11yTableSpec();
+    // No limit, ever: an export that silently truncates is a data-integrity bug.
+    const spec = this.a11yTableSpec(Number.POSITIVE_INFINITY);
     return (opts?.format ?? 'csv') === 'json' ? a11yTableToJSON(spec) : a11yTableToCSV(spec);
   }
 
@@ -370,21 +376,38 @@ class ChartImpl implements Chart {
    * when a cross-cutting feature contributes columns.
    *
    * Built from `a11yModel()` — the FULL data — never from the render model.
+   *
+   * v0.3.2 (E-8) — `limit` is threaded down to the definition, which may build
+   * only that many rows; whatever comes back is sliced here and given a true
+   * `total`, so a definition that ignores `limit` behaves exactly as before. The
+   * DOM asks for `a11y.tableMaxRows` rows (all it can materialize anyway) and
+   * `exportData()` asks for all of them, so the mount no longer pays for a
+   * million row objects to display two thousand.
+   *
+   * Cached PER LIMIT with the same lifetime as the a11y model: the DOM table,
+   * the description's row count and any `exportData()` the caller makes all ask
+   * on a single `syncDom`, and building rows is O(rows) with a string
+   * allocation per cell.
    */
-  private a11yTableSpec(): ReturnType<ChartTypeDefinition['a11yTable']> {
-    if (this.tableSpecCache) return this.tableSpecCache;
+  private a11yTableSpec(limit: number): ReturnType<ChartTypeDefinition['a11yTable']> {
+    const cached = this.tableSpecCache.get(limit);
+    if (cached) return cached;
     const model = this.a11yModel();
-    const spec = this.def.a11yTable({ opts: this.opts, theme: this.theme, model, layout: this.layoutState });
-    // Cached with the same lifetime as the a11y model. Building it is O(rows)
-    // with a string allocation per cell, and three separate consumers ask for it
-    // on a single `syncDom` (the DOM table, the description's row count, and any
-    // `exportData()` the caller makes) — so it is built once per data change,
-    // not once per consumer per frame.
-    this.tableSpecCache = applyDecoratorTables(spec, {
+    const spec = this.def.a11yTable(
+      { opts: this.opts, theme: this.theme, model, layout: this.layoutState },
+      { limit },
+    );
+    const bounded = applyTableLimit(spec, limit);
+    const out = applyDecoratorTables(bounded, {
       ...this.decoratorContext(this.renderer, this.geom),
       model,
     });
-    return this.tableSpecCache;
+    // A decorator maps rows; it does not know about the bound. Carry the count.
+    const withTotal = out.total === undefined && bounded.total !== undefined
+      ? { ...out, total: bounded.total }
+      : out;
+    this.tableSpecCache.set(limit, withTotal);
+    return withTotal;
   }
 
   /**
@@ -408,38 +431,38 @@ class ChartImpl implements Chart {
    * accessible DESCRIPTION says so (`samplingNote`) — the relationship is
    * stated, never silent.
    *
-   * Cached, because it is only invalidated by a data/type/visibility change: a
-   * resize, a theme switch, a hover and a zoom all reuse it.
+   * This is a VIEW, not a rebuild: `buildModel` already retained the pre-lossy
+   * points on each series (`NormalizedSeries.sourcePoints`), so recovering them
+   * costs one object per series rather than a second normalize pass over the
+   * caller's data. When no series was downsampled or windowed there is nothing
+   * to recover and the render model is returned as-is, so the common
+   * (small-data) case allocates nothing at all.
    */
   private a11yModel(): DataModel {
     if (this.a11yModelCache) return this.a11yModelCache;
-    // When nothing was dropped, the render model already IS the full model —
-    // no second ingest pass, so the common (small-data) case pays nothing.
-    this.a11yModelCache = this.renderModelIsLossy()
-      ? buildModel(
-          { ...this.opts, downsample: { ...this.opts.downsample, enabled: false } },
-          new Map(this.paletteSlots),
-          null,
-        )
-      : this.model;
+    if (!this.model.series.some((s) => s.sourcePoints)) {
+      this.a11yModelCache = this.model;
+      return this.a11yModelCache;
+    }
+    const series = this.model.series.map((s) =>
+      s.sourcePoints ? { ...s, points: s.sourcePoints } : s,
+    );
+    this.a11yModelCache = {
+      ...this.model,
+      series,
+      // `maxLen` is read by table stages to size their row loops; it must
+      // describe the points this model actually carries.
+      maxLen: series.reduce((n, s) => Math.max(n, s.points.length), 0),
+      // The table describes the whole series, not the zoom window.
+      viewport: null,
+    };
     return this.a11yModelCache;
-  }
-
-  /** True when the render model drops data the caller supplied. */
-  private renderModelIsLossy(): boolean {
-    if (this.viewport !== null) return true;
-    if (!this.def.needs.downsample || !this.opts.downsample.enabled) return false;
-    const raw = this.opts.data.series;
-    return this.model.series.some((s, i) => {
-      const src = raw[i]?.data;
-      return Array.isArray(src) && src.length > s.points.length;
-    });
   }
 
   /** Drop the cached a11y model + table DOM (data, type or visibility changed). */
   private invalidateA11y(): void {
     this.a11yModelCache = null;
-    this.tableSpecCache = null;
+    this.tableSpecCache.clear();
     this.tableDirty = true;
   }
 
@@ -465,12 +488,17 @@ class ChartImpl implements Chart {
       }
     }
 
-    // And whether the TABLE itself is bounded. Stated, never silent.
+    // And whether the TABLE itself is bounded. Stated, never silent — at
+    // whatever bound `a11y.tableMaxRows` set (default 2,000, `Infinity` = none).
+    // The count comes from `spec.total`, which is true whether the definition
+    // built every row or only the first `max` of them (v0.3.2, E-8).
     if (this.opts.a11y.table !== 'off') {
-      const rows = this.a11yTableSpec().rows.length;
-      if (rows > A11Y_TABLE_MAX_ROWS) {
+      const max = this.opts.a11y.tableMaxRows;
+      const spec = this.a11yTableSpec(max);
+      const rows = spec.total ?? spec.rows.length;
+      if (rows > max) {
         parts.push(
-          `The data table lists the first ${A11Y_TABLE_MAX_ROWS.toLocaleString()} of ` +
+          `The data table lists the first ${max.toLocaleString()} of ` +
             `${rows.toLocaleString()} rows; exportData() returns all ${rows.toLocaleString()}.`,
         );
       }
@@ -530,7 +558,13 @@ class ChartImpl implements Chart {
   private applyViewport(v: Viewport | null): void {
     if (this.destroyed) return;
     this.viewport = normalizeViewport(v);
-    this.model = buildModel(this.opts, this.paletteSlots, this.viewport);
+    // v0.3.2 (E-7): a zoom gesture re-slices the retained points; it does NOT
+    // re-ingest the caller's data. `rewindowModel` returns null for the shapes
+    // where that is not obviously equivalent (a stacked model, a band x axis),
+    // and then this is the old full rebuild.
+    this.model =
+      rewindowModel(this.model, this.opts, this.viewport) ??
+      buildModel(this.opts, this.paletteSlots, this.viewport);
     this.invalidateA11y();
     this.hover = null;
     this.focus = null;
@@ -643,6 +677,19 @@ class ChartImpl implements Chart {
 
   // ------------------------------------------------------------ theme watch
 
+  /**
+   * The theme actually painted with: the caller's resolved theme, re-expressed
+   * in CSS system colors when `forced-colors: active`.
+   *
+   * Forced colors is a USER preference that overrides authored color the way it
+   * overrides author CSS, so it applies to `theme: 'dark'` and to a fully custom
+   * `Theme` object alike — the resolution order is caller first, user last.
+   */
+  private themeFor(opts: ResolvedOptions): Theme {
+    const base = resolveTheme(opts.theme);
+    return forcedColorsActive() ? forcedColorsTheme(base) : base;
+  }
+
   private watchThemeIfAuto(): void {
     this.unwatchScheme();
     this.unwatchScheme = () => {};
@@ -650,10 +697,27 @@ class ChartImpl implements Chart {
     if (t === undefined || t === 'auto') {
       this.unwatchScheme = watchColorScheme(() => {
         if (this.destroyed) return;
-        this.theme = resolveTheme(this.opts.theme);
+        this.theme = this.themeFor(this.opts);
         this.refresh('update', false, false);
       });
     }
+  }
+
+  /**
+   * Forced-colors is watched for the chart's whole life, whatever `theme` says:
+   * unlike `prefers-color-scheme` (which only matters when the caller delegated
+   * the choice with `'auto'`), forced colors overrides an explicit theme too, so
+   * there is no configuration under which we may stop listening. Canvas pixels
+   * are NOT re-mapped by the browser, so a chart that ignored this event would
+   * keep painting its authored palette into a high-contrast desktop.
+   */
+  private watchForcedColorsAlways(): void {
+    this.unwatchForced();
+    this.unwatchForced = watchForcedColors(() => {
+      if (this.destroyed) return;
+      this.theme = this.themeFor(this.opts);
+      this.refresh('update', false, false);
+    });
   }
 
   // ---------------------------------------------------------------- pipeline
@@ -842,7 +906,11 @@ class ChartImpl implements Chart {
     } else {
       // Decorators may append entries (a trendline is legend-labeled so it can
       // never be mistaken for observed data) — always AFTER the type's items.
-      this.legend.update([...this.def.legendItems(this.geomContext()), ...this.decoratorLegendItems()], t, o.legend);
+      this.legend.update(
+        [...this.withSeriesEncoding(this.def.legendItems(this.geomContext())), ...this.decoratorLegendItems()],
+        t,
+        o.legend,
+      );
     }
     if (o.legend.position === 'top') {
       if (this.root.firstChild !== this.legend.el) this.root.insertBefore(this.legend.el, this.wrap);
@@ -892,7 +960,14 @@ class ChartImpl implements Chart {
     if (this.tableDirty || this.tableMode !== o.a11y.table) {
       this.tableWrap.textContent = '';
       if (o.a11y.table !== 'off') {
-        const table = buildDataTable(doc, o.title ?? this.ariaLabel(), this.a11yTableSpec());
+        // The DOM can only materialize `tableMaxRows` of them, so that is all
+        // the definition is asked to build (v0.3.2, E-8).
+        const table = buildDataTable(
+          doc,
+          o.title ?? this.ariaLabel(),
+          this.a11yTableSpec(o.a11y.tableMaxRows),
+          o.a11y.tableMaxRows,
+        );
         if (o.a11y.table === 'hidden') {
           visuallyHide(this.tableWrap);
         } else {
@@ -917,6 +992,22 @@ class ChartImpl implements Chart {
     }
 
     this.tooltip.applyTheme(t);
+  }
+
+  /**
+   * Carry each series' composite encoding onto its legend entry.
+   *
+   * Applied centrally rather than in all 39 `legendItems` stages, because it is
+   * a PIPELINE policy about the palette (`model.ts#seriesDash`), not something a
+   * chart type gets an opinion about. Items whose id names no series (pie
+   * slices, decorator entries) pass through untouched.
+   */
+  private withSeriesEncoding(items: readonly LegendItem[]): LegendItem[] {
+    return items.map((it) => {
+      const s = this.model.series.find((x) => x.id === it.id);
+      const dash = s ? seriesDash(s, this.theme) : undefined;
+      return dash ? { ...it, dash } : it;
+    });
   }
 
   /**
@@ -1198,11 +1289,19 @@ class ChartImpl implements Chart {
 
   // ---------------------------------------------------------------- tooltip
 
+  /**
+   * Format an x value the way this chart's DATA AXIS reads it.
+   *
+   * v0.3.2 (E-5): on a TIME axis a bare number is epoch milliseconds — by the
+   * type's own `needs.xScale: 'time'` declaration, never by sniffing the
+   * magnitude. This one call site serves the tooltip header AND the generic
+   * keyboard announcement, so both agree with the tick labels.
+   */
   private formatXValue(x: number | Date | string | null): string {
     const fmt = this.opts.xAxis.ticks?.format;
     if (x !== null && fmt) return fmt(x);
     const span = this.model.xDomain ? Math.abs(this.model.xDomain[1] - this.model.xDomain[0]) : 0;
-    return formatValue(x, x instanceof Date ? span : 0);
+    return formatTemporal(x, this.model.xType === 'time', span);
   }
 
   /**

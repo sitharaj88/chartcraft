@@ -4,7 +4,8 @@
  * Coloring rules (contract "Dataviz rules"): top-level nodes take the
  * categorical palette slots IN ORDER; descendants take lightness steps of
  * the parent hue by interpolating the parent color toward the theme surface
- * color — never new palette slots. Values: a parent's value is the sum of
+ * color — never new palette slots — with the step reversed rather than allowed
+ * to fade into the surface (`childColor`). Values: a parent's value is the sum of
  * its children (an explicit `value` on a parent with children is ignored,
  * per the contract).
  *
@@ -14,13 +15,59 @@
  */
 import type { Theme, TreeNode } from '../../types';
 import type { DataModel } from '../../model';
-import { mixHex } from './color-scale';
+import { contrastInk, contrastRatio, mixHex } from './color-scale';
 import { formatValue } from '../../util';
 
 /** Max mix fraction toward the surface for the last sibling of a brood. */
 export const CHILD_MIX_MAX = 0.5;
+/**
+ * Contrast floor every hierarchy fill must clear against the theme surface.
+ *
+ * These cells are large area fills separated by 2px SURFACE-COLOURED gaps: as a
+ * fill approaches the surface, the gap stops reading as a boundary and the cell
+ * stops existing as a shape. 2:1 is the contract's ordinal-ramp floor, and it is
+ * the right one here — every cell carries a direct label or a tooltip, so the
+ * relief the palette rules ask for is present.
+ */
+export const CHILD_MIN_CONTRAST = 2;
 /** Path segments are joined "A / B" per the contract's tooltip examples. */
 export const PATH_SEPARATOR = ' / ';
+
+/**
+ * Fill for a child node: a lightness step of the parent hue, CLAMPED so it can
+ * never fade into the surface (quality audit E-2).
+ *
+ * The step is computed exactly as before — mix the parent colour toward the
+ * surface by `t` — and used verbatim whenever it clears `CHILD_MIN_CONTRAST`.
+ * That is every step of every hue except the ones that were the defect, so no
+ * hierarchy chart that was legible changes at all.
+ *
+ * When the step WOULD fall below the floor, the direction flips: the child mixes
+ * AWAY from the surface by the same `t` instead. Slot 4 (`#eda100`) measures
+ * 2.11:1 on the light surface, so it has essentially no headroom to lighten —
+ * globally lowering `CHILD_MIX_MAX` to buy it that headroom would dull every
+ * other hue to fix one, and would still leave slot 4 with steps too small to
+ * see. Flipping keeps the full step size, so DEPTH STAYS LEGIBLE: a yellow
+ * hierarchy alternates lighter/darker by depth instead of dissolving into the
+ * page. The next depth starts from a colour with headroom again, so the
+ * direction alternates naturally rather than sticking.
+ *
+ * The trailing loop is the guarantee, not the mechanism: a custom theme whose
+ * slot already sits below the floor (or an explicit node colour used as a
+ * parent) is walked further toward the pole until the floor is met.
+ */
+export function childColor(parentColor: string, surface: string, t: number): string {
+  const toward = mixHex(parentColor, surface, t);
+  if (contrastRatio(toward, surface) >= CHILD_MIN_CONTRAST) return toward;
+  // `contrastInk` IS the away pole: near-black for a light surface, white for a
+  // dark one. Mixing toward it can only move luminance away from the surface.
+  const pole = contrastInk(surface);
+  let away = mixHex(parentColor, pole, t);
+  for (let k = 1; k <= 8 && contrastRatio(away, surface) < CHILD_MIN_CONTRAST; k++) {
+    away = mixHex(parentColor, pole, Math.min(1, t + k * 0.125));
+  }
+  return away;
+}
 
 export interface HierarchyNode {
   label: string;
@@ -79,7 +126,7 @@ export function buildHierarchy(rootsIn: readonly TreeNode[], theme: Theme): Hier
     const paletteColor =
       parent === null
         ? (theme.series[topIndex % theme.series.length] ?? '#888888')
-        : mixHex(parent.color, theme.surface, ((siblingIndex + 1) / (siblingCount + 1)) * CHILD_MIX_MAX);
+        : childColor(parent.color, theme.surface, ((siblingIndex + 1) / (siblingCount + 1)) * CHILD_MIX_MAX);
     const node: HierarchyNode = {
       label: n.label,
       value: nodeValue(n),

@@ -140,10 +140,71 @@ export interface A11yTableSpec {
     /** One cell per remaining column. */
     cells: string[];
   }[];
+  /**
+   * v0.3.2 — how many rows this chart HAS, when `rows` is only a prefix of them
+   * (see `A11yTableOptions.limit`). Omitted means `rows` is complete.
+   *
+   * The count is separate from the rows because both consumers need it and only
+   * one of them needs the rows: the accessible description states the total
+   * ("the data table lists the first 2,000 of 1,000,000 rows"), and the caption
+   * repeats it. A definition that honours `limit` MUST set this, or the chart
+   * will report the truncated count as the whole truth. The pipeline sets it
+   * for every definition that ignores `limit` and gets sliced instead.
+   */
+  total?: number;
 }
 
 /**
- * Maximum rows MATERIALIZED into the DOM table.
+ * v0.3.2 — options for the `a11yTable` definition stage (quality audit E-8).
+ *
+ * The table SPEC was built eagerly and completely on mount, because the DOM
+ * needs the first rows and the description needs the count: +565 ms at 100k
+ * points and +4.2 s at 1M, all of it synchronous main-thread work before the
+ * chart is interactive — while the DOM then materialized at most
+ * `a11y.tableMaxRows` of those rows anyway.
+ *
+ * `limit` is the fix, and it is deliberately ADDITIVE AND OPTIONAL: a definition
+ * that ignores it keeps working unchanged, because the pipeline slices the
+ * result and fills in `total` itself. Honouring it is a pure win for types whose
+ * rows are expensive to build (one row object with formatted string cells per
+ * datum), and pointless for types whose row count is bounded by their own shape
+ * (a gauge has one row; a sankey has nodes + links).
+ */
+export interface A11yTableOptions {
+  /**
+   * Build at most this many rows. `Infinity` (or omitted) means "all of them",
+   * which is what `exportData()` always asks for — an export that silently
+   * truncates is a data-integrity bug.
+   *
+   * A definition that honours it must also set `A11yTableSpec.total` to the
+   * number of rows it WOULD have produced.
+   */
+  limit?: number;
+}
+
+/**
+ * Rows a definition should build for a `limit`, as a safe integer bound.
+ * `undefined`/`Infinity`/NaN all mean "no bound"; negatives clamp to 0.
+ */
+export function a11yRowBudget(opts: A11yTableOptions | undefined): number {
+  const n = opts?.limit;
+  if (n === undefined || typeof n !== 'number' || Number.isNaN(n)) return Number.POSITIVE_INFINITY;
+  return n < 0 ? 0 : n;
+}
+
+/**
+ * Enforce a `limit` a definition may or may not have honoured, and make the
+ * total count true either way. ONE call site (the pipeline), so no definition is
+ * forced to change and none can report a truncated count as complete.
+ */
+export function applyTableLimit(spec: A11yTableSpec, limit: number): A11yTableSpec {
+  const total = spec.total ?? spec.rows.length;
+  if (spec.rows.length <= limit) return spec.total === total ? spec : { ...spec, total };
+  return { ...spec, rows: spec.rows.slice(0, limit), total };
+}
+
+/**
+ * DEFAULT maximum rows MATERIALIZED into the DOM table (`a11y.tableMaxRows`).
  *
  * The table is a real `<table>` with one `<tr>` per datum, rebuilt whenever the
  * data changes, and building it is linear in rows with a large constant (DOM
@@ -151,30 +212,53 @@ export interface A11yTableSpec {
  * 100,000-row table costs ~11.5 SECONDS of synchronous main-thread work on
  * mount, and a million-row one exhausts the heap outright.
  *
- * So the DOM table is capped and SAYS SO — in its own `<caption>` and in the
- * chart's accessible description. `exportData()` is NOT capped: it builds a
- * string on demand, only when asked, and an export that silently truncates is a
- * data-integrity bug. The split is deliberate: completeness where it is
+ * So the DOM table is capped by default and SAYS SO — in its own `<caption>` and
+ * in the chart's accessible description. `exportData()` is NOT capped: it builds
+ * a string on demand, only when asked, and an export that silently truncates is
+ * a data-integrity bug. The split is deliberate: completeness where it is
  * affordable, a stated bound where it is not.
  *
- * (Escalated in QUALITY-AUDIT.md: the alternative — an uncapped table — trades a
- * multi-second stall and an OOM for rows no screen reader can practically reach.)
+ * The bound is a DEFAULT, not a policy: a caller who genuinely needs every row
+ * in the DOM sets `a11y.tableMaxRows` (`Infinity` removes the cap) and accepts
+ * the cost above. The library should not decide that for an enterprise user; it
+ * should only make sure the cost is known and the truncation is never silent.
  */
 export const A11Y_TABLE_MAX_ROWS = 2000;
 
 /**
- * Build (or rebuild) the data table fallback from a definition's spec.
- * Truncates at `A11Y_TABLE_MAX_ROWS`, stating the truncation in the caption.
+ * Normalize a caller's `a11y.tableMaxRows` into a usable bound.
+ * Non-numeric or NaN falls back to the default; negatives clamp to 0;
+ * `Infinity` is legal and means "no cap".
  */
-export function buildDataTable(doc: Document, caption: string, spec: A11yTableSpec): HTMLTableElement {
+export function resolveTableMaxRows(value: number | undefined): number {
+  if (value === undefined || Number.isNaN(value) || typeof value !== 'number') return A11Y_TABLE_MAX_ROWS;
+  return value < 0 ? 0 : value;
+}
+
+/**
+ * Build (or rebuild) the data table fallback from a definition's spec.
+ * Truncates at `maxRows`, stating the truncation in the caption.
+ *
+ * v0.3.2: the spec may ALREADY be a prefix (the pipeline asks the definition for
+ * `limit` rows), in which case `spec.total` carries the true count. The caption
+ * states the count the chart has, never the count that happened to be built.
+ */
+export function buildDataTable(
+  doc: Document,
+  caption: string,
+  spec: A11yTableSpec,
+  maxRows: number = A11Y_TABLE_MAX_ROWS,
+): HTMLTableElement {
   const table = doc.createElement('table');
   table.className = 'chartcraft-data-table';
 
-  const truncated = spec.rows.length > A11Y_TABLE_MAX_ROWS;
+  const total = spec.total ?? spec.rows.length;
+  const shown = Math.min(spec.rows.length, maxRows);
+  const truncated = total > shown;
   const cap = doc.createElement('caption');
   cap.textContent = truncated
-    ? `${caption} — showing the first ${A11Y_TABLE_MAX_ROWS.toLocaleString()} of ` +
-      `${spec.rows.length.toLocaleString()} rows. Use exportData() for the complete data.`
+    ? `${caption} — showing the first ${shown.toLocaleString()} of ` +
+      `${total.toLocaleString()} rows. Use exportData() for the complete data.`
     : caption;
   table.appendChild(cap);
 
@@ -190,7 +274,7 @@ export function buildDataTable(doc: Document, caption: string, spec: A11yTableSp
   table.appendChild(thead);
 
   const tbody = doc.createElement('tbody');
-  for (const row of truncated ? spec.rows.slice(0, A11Y_TABLE_MAX_ROWS) : spec.rows) {
+  for (const row of spec.rows.length > maxRows ? spec.rows.slice(0, maxRows) : spec.rows) {
     const tr = doc.createElement('tr');
     const th = doc.createElement('th');
     th.scope = 'row';

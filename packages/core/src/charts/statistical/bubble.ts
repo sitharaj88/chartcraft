@@ -10,6 +10,7 @@ import type { TooltipPoint } from '../../types';
 import type { ChartTypeDefinition, GeomContext, TooltipExtractContext } from '../registry';
 import type { HoverState, RenderContext, TypeGeom } from '../../layout';
 import type { A11yTableSpec } from '../../a11y';
+import { a11yRowBudget } from '../../a11y';
 import { seriesColor, type DataModel } from '../../model';
 import { makeCartesianDefinition } from '../cartesian';
 import { HIT_RADIUS } from '../../interaction/hittest';
@@ -136,13 +137,15 @@ export const bubbleDefinition: ChartTypeDefinition = {
     return best;
   },
 
-  a11yTable(ctx): A11yTableSpec {
+  /** Honours `limit` (v0.3.2, E-8): one row per DATUM, so it can be huge. */
+  a11yTable(ctx, tableOpts): A11yTableSpec {
     const m = ctx.model;
     const xHead = ctx.opts.xAxis.label ?? (m.xType === 'time' ? 'Time' : 'X');
     const columns = [xHead];
     for (const s of m.series) columns.push(s.name, `${s.name} r`);
     const rows: A11yTableSpec['rows'] = [];
-    for (let i = 0; i < m.maxLen; i++) {
+    const built = Math.min(m.maxLen, a11yRowBudget(tableOpts));
+    for (let i = 0; i < built; i++) {
       const xVal = m.series[0]?.points[i]?.x ?? i;
       const cells: string[] = [];
       for (const s of m.series) {
@@ -152,7 +155,7 @@ export const bubbleDefinition: ChartTypeDefinition = {
       }
       rows.push({ header: formatValue(xVal), cells });
     }
-    return { columns, rows };
+    return { columns, rows, total: m.maxLen };
   },
 
   announce(ctx, pos): string | null {

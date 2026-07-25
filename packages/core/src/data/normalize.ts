@@ -219,6 +219,22 @@ export type XType = 'linear' | 'time' | 'category' | 'log';
 
 /**
  * Infer the x-axis type from data when not explicitly configured.
+ *
+ * Precedence, highest first:
+ *   1. the CALLER's `xAxis.type` — always wins;
+ *   2. a declared BAND axis (`needs.xScale: 'band'`) and the `bar` special case;
+ *   3. genuinely categorical data — supplied `categories`, or string `x` values;
+ *   4. what the data looks like (a `Date` sample -> time);
+ *   5. a declared TIME axis (`needs.xScale: 'time'`, v0.3.2 / E-5) — so a bare
+ *      number on a candlestick, an ohlc or a gantt is epoch milliseconds BY
+ *      DECLARATION rather than by sniffing its magnitude;
+ *   6. linear.
+ *
+ * The declaration deliberately sits BELOW the category checks: string x values
+ * and caller-supplied categories put the rest of the pipeline on a band scale
+ * (`bandIndexFor`, tick lookup, the a11y table all address bands by index), and
+ * a declaration must not contradict a placement everything else is already
+ * using. A type that declares time and receives categories gets categories.
  */
 export function inferXType(args: {
   explicit?: 'linear' | 'time' | 'log' | 'category' | undefined;
@@ -227,6 +243,8 @@ export function inferXType(args: {
   sampleXs: readonly (number | Date | string | null)[];
   /** Chart types that declare a band x-axis (registry `needs.xScale: 'band'`). */
   forceCategory?: boolean;
+  /** Chart types that declare a time x-axis (registry `needs.xScale: 'time'`). */
+  forceTime?: boolean;
 }): XType {
   if (args.explicit) return args.explicit;
   if (args.forceCategory) return 'category';
@@ -236,6 +254,7 @@ export function inferXType(args: {
     if (x instanceof Date) return 'time';
     if (typeof x === 'string') return 'category';
   }
+  if (args.forceTime) return 'time';
   return 'linear';
 }
 

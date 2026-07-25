@@ -146,6 +146,45 @@ function linkEndpointError(ref: unknown, ids: readonly string[]): Error {
 }
 
 /**
+ * A network's natural reading order: every node in degree-descending order,
+ * each immediately followed by ITS OUTGOING LINKS (in caller order).
+ *
+ * v0.3.2 (E-4). This is sankey's proven shape, reused verbatim: one flat index
+ * space that drives keyboard navigation, `dataIndex`, hit-test indices and the
+ * a11y table rows, so a link cannot be reachable in one surface and invisible in
+ * another. Each link appears exactly once — under its SOURCE — so
+ * `nodes.length + links.length` entries address every mark the chart draws.
+ */
+export type NetworkEntry =
+  | { kind: 'node'; node: NetworkNode; index: number }
+  | { kind: 'link'; link: NetworkLink; index: number; source: NetworkNode; target: NetworkNode };
+
+export function networkReadingOrder(graph: NetworkGraph | null): NetworkEntry[] {
+  if (!graph) return [];
+  const out: NetworkEntry[] = [];
+  const outgoing: number[][] = graph.nodes.map(() => []);
+  graph.links.forEach((l, li) => {
+    const bucket = outgoing[l.source];
+    if (bucket) bucket.push(li);
+  });
+  graph.nodes.forEach((node, ni) => {
+    out.push({ kind: 'node', node, index: ni });
+    for (const li of outgoing[ni] ?? []) {
+      const link = graph.links[li];
+      const source = link ? graph.nodes[link.source] : undefined;
+      const target = link ? graph.nodes[link.target] : undefined;
+      if (link && source && target) out.push({ kind: 'link', link, index: li, source, target });
+    }
+  });
+  return out;
+}
+
+/** Label for a link entry, matching sankey's "A → B" convention. */
+export function networkLinkLabel(source: NetworkNode, target: NetworkNode): string {
+  return `${source.label} → ${target.label}`;
+}
+
+/**
  * Parse + normalize a network graph. Returns null when the data carries no
  * node list at all (an empty chart, not an error). Throws when a link points
  * at a node that does not exist — a silently dropped edge is a wrong picture.

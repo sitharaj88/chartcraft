@@ -27,6 +27,8 @@ asked for exist now, and `packages/core/src/charts/AUTHORING.md` documents them.
 | 74–84 | Geographic & graph types |
 | 85–90 | Cross-cutting features |
 | 91–93 | Testing notes |
+| 94 | Quality-audit finding accepted as documented behaviour |
+| 95–105 | Quality-audit escalations: the architect's rulings |
 
 ---
 
@@ -1615,3 +1617,303 @@ chart's own deep clone (entry 13), so the caller's object is untouched and a
 shared fixture is safe — but tests that assert on a fixture across several
 mounts still build data through a factory, because a `structuredClone`
 comparison is only meaningful against a pristine object.
+
+---
+
+# Quality-audit findings accepted rather than fixed (v0.3)
+
+Entry 94 was raised by the v0.3 quality audit (`/QUALITY-AUDIT.md`) and is a
+defect that was **judged and consciously accepted**, not one that was missed.
+Anything the audit fixed is not recorded here — the fix and its test are the
+record. Its three former neighbours (`network` links invisible to AT, epoch `x`
+announced as a number, and the three types that rendered empty in silence) were
+accepted only for as long as they were unruled; rulings E-4, E-5 and E-9 closed
+all three in v0.3.2, so they are deleted rather than marked, and what the fixes
+themselves changed is recorded in §100–§105 below.
+
+## 94. `calendar` paints day cells that keyboard navigation and the data table cannot reach
+
+A calendar draws a cell for **every day in `[start, end]`** but only days
+carrying a datum are navigable or tabulated: a sparse year is 365 painted cells,
+3 keyboard stops and 3 table rows. The contract says "Keyboard walks days", and
+`choropleth` already sets the opposite precedent (features with no datum are
+listed as `no data`).
+
+Accepted because closing it needs a synthetic day series spanning the whole
+range — a type-level redesign of calendar's model, not a patch — and the visual
+affordance the missing cells provide (an empty grid position) is genuinely
+weaker information than the ones that are exposed.
+
+Mitigated instead: the accessible NAME states the sparsity outright ("1 Jan 2026
+to 31 Jan 2026 (31 days), 2 with data, values from …"), so a screen-reader user
+is never told the month contains only two days. Pinned by
+`test/a11y.conformance.test.ts` ("calendar: no-value day cells are drawn but not
+navigable (known gap, pinned)") so the gap cannot widen unnoticed.
+
+# Quality-audit escalations: the architect's rulings
+
+## 95. A caller-supplied sequential ramp is used VERBATIM in both colour schemes
+
+Ruling E-3 made the DEFAULT sequential ramp's direction depend on
+`theme.colorScheme`: light keeps low → lightest / high → darkest, dark reverses,
+so the highest-magnitude step clears 3:1 on either surface (11.64:1 light,
+13.16:1 dark; it was 1.46:1 in dark before). `heatmap`, `calendar` and
+`choropleth` all take the oriented default, and `docs/api-contract.md` now
+states the per-scheme direction where it used to say only "default ramp:
+sequentialPalette".
+
+The deviation is the carve-out: **a ramp the caller passes** (`heatmap.ramp`,
+`calendar.ramp`, `choropleth.ramp`) is **not** reoriented. The rule the ruling
+enforces — "the near-zero end may recede, the high end may not" — is not
+enforced on caller ramps.
+
+Accepted because reversing an array the caller wrote is a worse failure than the
+one it prevents: their ramp may not even be monotone in lightness (a two-hue or
+banded ramp reversed by us would encode the opposite of what they meant), and a
+library silently inverting an explicit visual choice is unpredictable in a way
+the original bug was not. The direction rule is documented in the contract so a
+caller supplying a ramp knows what is expected of it.
+
+**Hierarchy lightness steps are a DEPTH encoding, not a magnitude one**, and
+share no code with the sequential ramp — a deeper node receding toward the
+surface is correct on either surface. What they now also obey is a contrast
+floor, for a different reason: see §100.
+
+## 96. Palette slots 9+ get composite encoding, not the fold `ARCHITECTURE.md` promised
+
+`ARCHITECTURE.md` §4 used to say "never cycle hues past slot 8 (fold to
+'Other')". The library does not fold, and now does not claim to. Ruling E-1:
+auto-merging a 9th series into "Other" would destroy data the caller explicitly
+asked us to draw, and that is not the library's decision to make.
+
+What happens instead: the validated hue ORDER is reused (never a generated
+hue), and a second, non-colour channel separates the repeat — a **dash pattern**
+on line/area strokes and a **marker shape** (square, triangle, diamond) wherever
+markers are drawn, carried onto the legend swatch as a matching stripe. One
+`console.warn` per chart instance names the chart and recommends the real fix
+("Other", or small multiples). §4 has been rewritten to describe this.
+
+Two bounded gaps, deliberate:
+
+- **Bar, pie and the non-cartesian types get colour only.** A bar has no line to
+  dash and no marker to reshape; texture fills would be the analogous channel and
+  the renderer has no texture primitive. In practice these forms carry direct
+  labels or a data table, which is the relief the palette rules ask for.
+- **`bubble` keeps circles.** Its marker size is a data channel; changing the
+  shape as well would make two encodings share one mark.
+
+## 97. `ohlc` gets no new glyph — its redundant channel is geometric
+
+Ruling E-6 asked for the hollow/solid fill convention on `candlestick` and to
+"carry the same fill convention to `ohlc` where it applies". Candlestick is
+implemented exactly as ruled: rising bodies hollow (1px outline, surface-filled),
+falling bodies solid.
+
+For `ohlc` the judgement was that the fill convention does **not** apply and does
+not need to. An OHLC mark has no body to fill, and it already encodes direction
+geometrically: the close tick (right) sits above the open tick (left) on a rising
+mark and below it on a falling one — the same redundancy the audit itself
+accepted as sufficient for `waterfall` ("direction is redundantly encoded by
+whether the bar rises or falls"). Inventing a terminator glyph would have added
+visual output the contract does not describe, and would have broken three
+existing tests that encode the contract's OHLC spec ("no filled bodies", "three
+1px strokes per mark") rather than any defect.
+
+What was added instead: the geometric invariant is now pinned by a test, and the
+convention is stated in `ohlc`'s accessible description so a reader who cannot
+use the colour is told which channel carries the direction. Both types also
+announce "rising" / "falling" / "unchanged" per mark — the comparison the chart
+exists to convey was previously left for the listener to perform.
+
+**Flagged for the architect**: if the intent was a drawn glyph on `ohlc` as well,
+this is the one place the ruling was read narrowly.
+
+## 98. The DOM data table is capped by default, and `exportData()` never is
+
+Ruling E-10 confirmed the 2,000-row DOM cap and made it the caller's choice:
+`a11y.tableMaxRows` (default 2000, `Infinity` allowed) is now part of
+`A11yOptions` in the contract.
+
+The deviation from "row counts match the input" stands for the DOM table at its
+default, and is stated in both places a reader could look — the table's own
+`<caption>` and the chart's accessible description, each naming `exportData()`
+as the complete source. Materializing one `<tr>` per datum costs ~115 µs/row:
+~11.5 s of synchronous main-thread work at 100k rows, heap exhaustion at 1M. A
+caller who needs every row in the DOM sets the option and accepts that cost.
+`exportData()` is uncapped at every setting.
+
+Since v0.3.2 the cap also bounds what is BUILT, not only what is materialized
+(§104).
+
+## 99. `forced-colors` support is implemented, with two stated limits
+
+`ARCHITECTURE.md` §3 claimed `forced-colors` support that did not exist. Option
+(a) of the ruling was taken rather than deleting the claim: the pipeline detects
+`matchMedia('(forced-colors: active)')`, re-expresses the resolved theme in CSS
+system colours (`Canvas`, `CanvasText`, `GrayText`, `LinkText`, `Highlight`)
+before painting, and watches the query for the chart's whole lifetime. It
+overrides `theme: 'dark'` and a custom `Theme` object alike, because forced
+colours is a user preference. §3 now describes the mechanism instead of
+asserting the outcome.
+
+Two limits, recorded rather than papered over:
+
+1. **Three series colours, not eight.** A forced palette defines only a handful
+   of foreground roles that every High Contrast theme keeps distinguishable from
+   the background; `CanvasText`, `LinkText` and `Highlight` are those. Series 4+
+   fall back to the composite encoding of §96. Deriving more "hues" would be
+   inventing contrast guarantees the platform does not make.
+2. **Real-browser resolution is unverified.** The tests drive a `matchMedia`
+   stub and assert that system-colour keywords reach the renderer; that a browser
+   resolves `ctx.fillStyle = 'CanvasText'` against the user's forced palette is
+   documented CSS behaviour, but this suite runs on jsdom with a stubbed canvas
+   and cannot prove it. It falls inside the audit's existing "no real-browser
+   rendering was verified" gap, not outside it.
+
+## 100. Hierarchy depth steps REVERSE at the contrast floor instead of stopping
+
+Ruling E-2: a hierarchy child's lightness step is computed as before and then
+clamped so every node's fill clears **2:1** against the current surface. The
+ruling explicitly rejected lowering `CHILD_MIX_MAX` globally — that dulls every
+hue to fix one — and asked for a per-slot clamp, with depth allowed to
+*alternate direction* where a hue cannot express further steps within the floor.
+
+`CHILD_MIX_MAX` is therefore unchanged at 0.5, and `matrix/hierarchy.ts#childColor`
+is the whole of the mechanism: take the step toward the surface if it clears the
+floor, otherwise take the same-size step AWAY from the surface. The deviations
+worth knowing:
+
+- **A yellow hierarchy alternates lighter/darker by depth.** Slot 4 (`#eda100`)
+  measures 2.11:1 on the light surface, so it has no usable headroom to lighten
+  at all; its children are darker than their parent, whose children are lighter
+  again. "Children are lightness steps of the parent hue" still holds — the
+  hue is untouched and no new slot is introduced — but the steps are no longer
+  monotone in one direction for every hue. The contract's dataviz rule now says
+  so.
+- **The clamp is measured, not tabulated.** It asks `contrastRatio` against
+  `theme.surface` at build time, so a custom theme gets the same guarantee, and
+  a custom theme whose slot ALREADY sits below the floor is walked toward the
+  away-pole until it clears (a bounded loop, never a throw).
+- **An explicit `TreeNode.color` is never clamped.** A colour the caller wrote
+  is their choice, exactly as with a caller-supplied ramp (§95). Its children
+  are clamped, because those we generate.
+
+Measured, light surface, slot 4 at the audit's failing step: **1.58:1 → 4.69:1**.
+Depth 5 in both schemes, every slot, is asserted in `test/v032.rulings.test.ts`.
+
+## 101. `network` walks nodes THEN links, and `dataIndex` is a reading-order index
+
+Ruling E-4: network's keyboard walk and data table cover links as well as nodes,
+"exactly as `sankey` already does". Implemented by reusing sankey's shape — one
+flat reading order (`networkReadingOrder`: each node, then that node's outgoing
+links) synthesised onto the first series in `resolveOptions`, so the shared
+pipeline gives every mark an event identity, a focus stop, a tooltip and a table
+row with no per-type branching.
+
+The contract's `network` row is amended accordingly (it specified
+`node, group, degree, value` and "keyboard walks nodes by degree"). Three
+consequences a caller can observe:
+
+- **`PointEvent.dataIndex` is now the reading-order index, not the degree rank.**
+  For a node it is still the rank when the graph has no links, and the nodes are
+  still visited in degree-descending order — but a link sits between them. This
+  is the same index-space rule sankey has always had, and it is the only way the
+  two surfaces can agree.
+- **The table gained two columns** (`Source`, `Target`) and its first column is
+  titled `Node / link`. `exportData()` mirrors it, so a CSV consumer sees the
+  new columns. Node rows carry `—` in the link columns and vice versa.
+- **Links are hit-testable** (within 5px of the segment), nodes winning ties, so
+  the pointer reaches exactly the marks the keyboard does. Link tooltips show
+  the edge and its value.
+
+## 102. A declared time axis makes a bare `x` epoch milliseconds
+
+Ruling E-5 added `ChartTypeNeeds.xScale: 'time'`, declared by `candlestick`,
+`ohlc` and `gantt`. `inferXType` honours it, so on those types a numeric `x` is
+epoch ms and the tick labels, tooltip header, a11y table and keyboard
+announcement all read as times instead of announcing `1767.23B`.
+
+What deviates, stated because it is a behaviour change on existing data:
+
+- **A small integer `x` on these three types is now 1 Jan 1970**, not `1`. That
+  is the declaration doing exactly what it says; it is also why the audit's
+  scoped fix was correctly reverted (sniffing magnitudes is a guess, declaring
+  is not). Two existing assertions that demanded the bare number under a column
+  titled `Time` were restated — they encoded audit finding A-7.
+- **The declaration loses to genuinely categorical data.** Caller-supplied
+  `categories` or string `x` values still produce a band axis, because the rest
+  of the pipeline (`bandIndexFor`, tick lookup, the table) is already addressing
+  bands by index and a declaration must not contradict a placement in use.
+  An explicit `xAxis.type` outranks everything, as always.
+- **`gantt` no longer writes `xAxis.type: 'time'` into the resolved options.**
+  It declares instead, so `getOptions().xAxis` round-trips the caller's
+  configuration rather than a computed one (entry 15's rule). It still pins
+  `min`/`max` to the task span, which is a domain, not an axis kind.
+- **Dates are formatted in LOCAL time**, as every other time axis in the library
+  is (`util.ts#formatDate`). `calendar` remains the documented exception (entry
+  61: a calendar day is only well defined against a fixed zone, so it is UTC).
+
+## 103. A zoom gesture re-windows incrementally, with two documented fallbacks
+
+Ruling E-7: `zoomTo` re-slices the retained `sourcePoints` instead of re-running
+`buildModel`. `model.ts#rewindowModel` recomputes the drawn points, the value
+and x extents and both domain-extension stages through the SAME helpers
+`buildModel` uses, so the two cannot drift.
+
+It deliberately declines — returning `null`, which makes the caller fall back to
+the full rebuild — in two cases:
+
+1. **A stacked model.** `y0`/`y1` are index-aligned to the arrays a stack pass
+   produced; windowing one member of a stack would desynchronize it. Stacked
+   bar/area are excluded from downsampling anyway, so this costs nothing real.
+2. **A non-continuous x axis.** A band axis ignores the viewport by design
+   (entry 22), so there is nothing to re-slice.
+
+Measured on the bench host: `zoomTo` a 0.1% window of 1M points **76.8 ms →
+9.9 ms**; a full reset from 1M 310.9 ms → 253.0 ms (the reset still pays LTTB
+over the whole series plus the a11y sampling note's count, which is the
+remaining cost and is not a re-ingest).
+
+## 104. `a11yTable`'s `limit` is optional, and only four table implementations honour it
+
+Ruling E-8: `a11yTable(ctx, opts?: { limit?: number })`, additive and optional.
+The DOM path passes the resolved `a11y.tableMaxRows`; `exportData()` passes
+nothing and still gets every row. A definition that ignores `limit` is sliced by
+the pipeline, which also fills in `A11yTableSpec.total`, so no type was forced to
+change.
+
+Adopted where a row is genuinely expensive to build — one row object with
+formatted string cells per DATUM: the shared **cartesian** table (line, area,
+bar, scatter and everything built on it), **candlestick/ohlc**, **bubble** and
+**rangearea**. Every other type still builds its rows eagerly, which is correct:
+their row counts are bounded by their own shape (a gauge has one row, a sankey
+has nodes + links, a heatmap has one row per series), so a budget would be
+ceremony. `AUTHORING.md` documents when to adopt it and the exact shape.
+
+Consequences: `A11yTableSpec` gained an optional `total`, and the caption and
+accessible description read it rather than `rows.length` — a definition that
+honours `limit` but forgets `total` would report the truncated count as the
+whole truth. Decorator `a11yTable` transforms run AFTER the bound, on the rows
+that survived it, and the pipeline carries `total` across them.
+
+Measured mount with the default (`table: 'hidden'`), bench host: **100k
+643.7 ms → 292.1 ms**, **1M 4697.2 ms → 1206.8 ms**. The a11y layer's share of
+the mount at 1M falls from +3.89 s to +0.28 s. `exportData()` is unchanged and
+still complete.
+
+## 105. `candlestick`, `ohlc` and `network` reject wrong-shape data — but not EMPTY data
+
+Ruling E-9: these three throw the same clear, actionable errors as their peers
+instead of rendering an empty chart in silence. The messages name the type, the
+expected shape and (for the financial pair) the offending series and entry.
+
+The line drawn, which is the deviation worth recording: **an empty series list,
+an empty `data` array and all-null data are still an empty chart, not an error**
+— no data is not wrong data, and that is exactly where `gantt` and `sankey` draw
+it too. The financial check additionally passes as soon as ONE entry carries a
+full open/high/low/close, so a payload with some malformed rows still renders
+and simply skips them, as it always did; only a series that cannot produce a
+single mark is an error.
+
+`test/robustness.test.ts` pinned the old silence; it now pins the diagnostic,
+including that the message stays actionable rather than merely present.

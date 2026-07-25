@@ -13,10 +13,29 @@ export interface LegendItem {
   color: string;
   visible: boolean;
   toggleable: boolean;
+  /**
+   * Composite-encoding dash pattern (`model.ts#seriesDash`), set by the
+   * pipeline for series past the validated 8 palette slots. The swatch stripes
+   * itself to match the drawn line — otherwise the legend would be the one
+   * place where series 9 still looked exactly like series 1.
+   */
+  dash?: number[];
 }
 
 export interface LegendCallbacks {
   onToggle(seriesId: string): void;
+}
+
+/**
+ * Swatch fill: a flat color normally, and a striped gradient echoing the dash
+ * pattern when one is set. The stripe period is the dash's own on/off lengths,
+ * scaled into a 10px swatch, so the legend and the line read as the same series.
+ */
+export function swatchBackground(color: string, dash?: readonly number[]): string {
+  if (!dash || dash.length < 2) return color;
+  const on = Math.max(1, Math.min(5, dash[0] as number));
+  const off = Math.max(1, Math.min(5, dash[1] as number));
+  return `repeating-linear-gradient(90deg, ${color} 0 ${on}px, transparent ${on}px ${on + off}px)`;
 }
 
 export class Legend {
@@ -75,7 +94,7 @@ export class Legend {
       sst.width = '10px';
       sst.height = '10px';
       sst.borderRadius = '3px';
-      sst.background = s.visible ? s.color : 'transparent';
+      sst.background = s.visible ? swatchBackground(s.color, s.dash) : 'transparent';
       sst.boxShadow = s.visible ? 'none' : `inset 0 0 0 1.5px ${s.color}`;
       sst.flexShrink = '0';
 

@@ -14,7 +14,8 @@ export const version: string;
 export const lightTheme: Theme;
 export const darkTheme: Theme;
 export const categoricalPalette: { light: string[]; dark: string[] }; // 8 slots each
-export const sequentialPalette: string[];   // blue ramp 100→700, light→dark
+export const sequentialPalette: string[];   // blue ramp 100→700, as written light→dark
+export function sequentialRampFor(scheme: 'light' | 'dark'): string[]; // the ramp DIRECTED for a surface
 
 // Utilities (exported for advanced users & wrappers)
 export { LinearScale, TimeScale, BandScale, LogScale } from './scales';
@@ -57,6 +58,7 @@ interface ChartOptions {
   data: ChartData;
   // Presentation
   theme?: 'light' | 'dark' | 'auto' | Theme;      // default 'auto' (follows prefers-color-scheme)
+                                                 // OVERRIDDEN, at any setting, by forced-colors: active
   title?: string;                                  // rendered above plot, primary ink
   subtitle?: string;                               // secondary ink
   width?: number;                                  // px; default: container size (responsive)
@@ -133,7 +135,25 @@ interface A11yOptions {
   description?: string;   // longer text description
   table?: 'hidden' | 'visible' | 'off';  // data table fallback; default 'hidden' (visually hidden, AT-readable)
   keyboard?: boolean;     // arrow-key point navigation + live announcements; default true
+  tableMaxRows?: number;  // rows MATERIALIZED into the DOM table; default 2000, Infinity allowed
 }
+```
+
+`tableMaxRows` bounds the DOM table only. Building the table costs ~115 &micro;s
+per row (one `<tr>` per datum, rebuilt on every data change), so raising it to
+100,000 buys an ~11.5-second synchronous stall and 1,000,000 exhausts the heap
+— which is why the default exists. Whatever the bound:
+
+- the truncation is stated in the table's own `<caption>` **and** in the chart's
+  accessible description, each naming `exportData()` as the complete source;
+- **`exportData()` is never capped** — it returns every row, always;
+- the bound is pushed DOWN into the chart type, not applied after the fact: a
+  type whose rows are expensive to build (one formatted row object per datum)
+  builds only the rows the DOM can show and reports the true total alongside
+  them, so a bounded table no longer costs a full row build on mount. Types that
+  do not opt in are bounded by the pipeline instead and behave identically.
+
+```ts
 ```
 
 ## Events
@@ -186,7 +206,51 @@ interface Theme {
 | 7 | `#4a3aa7` | `#9085e9` | | | | |
 | 8 | `#e34948` | `#e66767` | | | | |
 
-Sequential ramp (light→dark): `#cde2fb #b7d3f6 #9ec5f4 #86b6ef #6da7ec #5598e7 #3987e5 #2a78d6 #256abf #1c5cab #184f95 #104281 #0d366b`
+Sequential ramp (as written, light→dark): `#cde2fb #b7d3f6 #9ec5f4 #86b6ef #6da7ec #5598e7 #3987e5 #2a78d6 #256abf #1c5cab #184f95 #104281 #0d366b`
+
+### Sequential encoding DIRECTION is per colour scheme
+
+A sequential ramp encodes magnitude, and the rule is asymmetric: **the
+near-zero end of the ramp may recede toward the surface; the high end must
+never be the one that recedes.** The array above satisfies that on a light
+surface only — `#0d366b` measures 11.64:1 against `#fcfcfb` but **1.46:1**
+against the dark surface `#1a1a19`.
+
+So the default ramp's direction follows `theme.colorScheme`:
+
+| scheme | low (near zero) | high (maximum) | high-end contrast |
+|---|---|---|---|
+| `light` | `#cde2fb` (1.29:1 — recedes, as intended) | `#0d366b` | **11.64:1** |
+| `dark` | `#0d366b` (1.46:1 — recedes, as intended) | `#cde2fb` | **13.16:1** |
+
+The steps are identical; only the mapping reverses. This applies to every
+consumer of the DEFAULT ramp — `heatmap`, `calendar`, `choropleth` — and matches
+what `funnel` already does with its ordinal span. A ramp the CALLER supplies
+(`heatmap.ramp`, `calendar.ramp`, `choropleth.ramp`) is used **verbatim in both
+schemes**: the caller chose the direction, and silently reversing their array
+would be the more surprising behaviour.
+
+### `forced-colors: active`
+
+When the user agent reports `forced-colors: active` (Windows High Contrast and
+equivalents), the resolved theme is re-expressed in **CSS system colors** before
+anything is painted, and `theme.forcedColors` is set:
+
+| token | forced value |
+|---|---|
+| `surface` | `Canvas` |
+| `textPrimary` / `textSecondary` / `axisLine` | `CanvasText` |
+| `textMuted` / `gridline` / `neutral` | `GrayText` |
+| `series` | `CanvasText`, `LinkText`, `Highlight` (3 slots) |
+| `up` / `down` | `CanvasText` |
+
+This is a **user** preference, so it overrides `theme: 'dark'` and a fully custom
+`Theme` object alike, and it is watched live for the chart's whole lifetime (a
+canvas's pixels are not re-mapped by the browser the way DOM colors are, so a
+chart that ignored the change would keep painting its authored palette into a
+high-contrast desktop). With only three series colors available, series 4+ fall
+back to the same composite encoding used past palette slot 8, and `up`/`down`
+collapsing to one color is why `candlestick` carries direction in its FILL.
 
 ## Mark & interaction spec (visual quality bar)
 
@@ -256,7 +320,9 @@ interface TreeNode { label: string; value?: number; color?: string; children?: T
 interface ChartOptions {
   // ... v0.1 fields ...
   histogram?: { bins?: number | 'auto' };       // 'auto' = Freedman–Diaconis, clamped 5..60
-  heatmap?: { ramp?: string[]; min?: number; max?: number };  // default ramp: sequentialPalette
+  heatmap?: { ramp?: string[]; min?: number; max?: number };
+    // default ramp: sequentialPalette, DIRECTED by theme.colorScheme (light: low=lightest,
+    // high=darkest; dark: reversed). A supplied ramp is used verbatim in both schemes.
   gauge?: { min?: number; max?: number;         // default 0..100
             bands?: { to: number; color: string }[] };  // optional colored ranges
   waterfall?: { connectors?: boolean };         // hairline connectors between bars, default true
@@ -267,6 +333,8 @@ interface Theme {
   up: string;    // financial rise / waterfall increase.  light '#0ca30c', dark '#0ca30c'
   down: string;  // financial fall / waterfall decrease.  light '#d03b3b', dark '#d03b3b'
   neutral: string; // waterfall totals & neutral marks.    light '#52514e', dark '#c3c2b7'
+  forcedColors?: boolean; // set BY THE PIPELINE when `forced-colors: active`; every color above
+                          // is then a CSS system-color keyword. Never set by a caller.
 }
 ```
 
@@ -278,8 +346,8 @@ interface Theme {
 | `sparkline` | same as `line`, single series | Chrome-free preset: no axes, grid, legend, title padding; tooltip optional (default off); fills container (inline heights ~24–48px). Keyboard/table a11y still on. |
 | `histogram` | series `data: number[]` = raw samples | Bins per `histogram.bins`, renders as full-width bars (no inter-bar gap except 1px hairline), x = linear bin edges, y = count. Multi-series → translucent overlay (alpha 0.7). |
 | `boxplot` | per category: 5-number object or raw `number[]` (summary computed) | Box q1–q3, median line, whiskers to min/max, outlier dots (≥8px). Uses `categories` on x. Legend = series. |
-| `candlestick` | `{x, o, h, l, c}` or `[x, o, h, l, c]` | Body o→c filled `theme.up`/`theme.down`; wick h→l 1px. Time x-axis. Never animated sweeps (reduced-motion irrelevant — appear instantly). |
-| `ohlc` | same as candlestick | Open/close ticks left/right on the h–l bar; same colors. |
+| `candlestick` | `{x, o, h, l, c}` or `[x, o, h, l, c]` | Body o→c in `theme.up`/`theme.down`, **hollow when rising** (1px outline, surface-filled) and **solid when falling**; wick h→l 1px. **Time x-axis: the type declares it, so a numeric `x` is epoch milliseconds** — tick labels, tooltip header, the table's `Time` column and the announcement all read as times. Never animated sweeps (reduced-motion irrelevant — appear instantly). Data carrying no open/high/low/close at all is rejected with a clear error naming the shape. |
+| `ohlc` | same as candlestick | Open/close ticks left/right on the h–l bar; same colors and the same declared time x-axis and shape rejection. No body to fill — direction is carried by the tick geometry (close tick above open when rising). |
 | `waterfall` | single series; values = deltas; `isTotal: true` points are absolute totals | Floating bars: increase `theme.up`, decrease `theme.down`, totals `theme.neutral`; hairline connectors per `waterfall.connectors`. |
 | `heatmap` | each series = one row; `data: number[]` aligned to `categories` (columns) | Cell color from sequential `heatmap.ramp` scaled `min..max` (default data extent). 1px surface gaps between cells. Legend = horizontal gradient color-scale bar with min/max labels (non-toggleable). Value visible in tooltip + a11y table (relief for low-contrast steps). |
 | `treemap` | one series, `data: TreeNode[]` | Squarified layout, top-level nodes take categorical slots in palette order, children = lightness steps of parent hue; 2px surface gaps; direct labels on cells that fit (ink, ellipsized), tooltip for the rest. Legend = top-level nodes, non-toggleable. |
@@ -299,9 +367,13 @@ interface Theme {
   `seriesId` + `dataIndex` identify the mark; `x`/`y` carry the natural values.
 - **Tooltips:** per-mark (`shared` only meaningful for cartesian line-likes;
   candlestick/ohlc default to per-mark with an OHLC block).
-- **Dataviz rules:** no dual axes; categorical hues in slot order, never
-  cycled — hierarchies use lightness steps within a hue; sequential = one hue
-  light→dark; status/up/down colors never impersonate series slots; text in
+- **Dataviz rules:** no dual axes; categorical hues in slot order; a 9th series
+  is never a GENERATED hue — the order is reused with a **composite encoding**
+  (dash pattern + marker shape) and a one-time console recommendation to fold
+  the tail into "Other" or use small multiples (see `ARCHITECTURE.md` §4);
+  hierarchies use lightness steps within a hue; sequential = one hue, directed by
+  the colour scheme (above); status/up/down colors never impersonate series
+  slots, and on `candlestick`/`ohlc` never carry direction alone; text in
   ink colors, never mark colors; ≥ 2:1 contrast for ordinal ramp starts;
   direct labels are selective, not exhaustive.
 - **Tests:** every type ships unit tests for its layout math (bins, squarify,
@@ -441,7 +513,7 @@ interface Chart {
 | `streamgraph` | like stacked `area` | Stacked area with an "inside-out" (wiggle-minimizing) baseline offset; no y-axis ticks (the baseline is meaningless) — y-axis labels suppressed, values live in tooltip + table. |
 | `marimekko` | series with `{x: column, y: value}` + per-column width from series `data[i].r` or a `widths` categories parallel | Variable-width 100%-stacked columns: column width ∝ column total, segment height ∝ share. 2px surface gaps. Both dimensions in the tooltip and table. |
 | `pyramid` | exactly 2 series (e.g. male/female) over shared `categories` | Mirrored horizontal bars around a centered category axis; x-axis shows absolute magnitude on both arms. Legend = the 2 series. |
-| `calendar` | one series, `{x: Date, y: value}` | Day cells laid out in week columns, month boundaries hairline-separated, weekday labels in `textMuted`; color from `calendar.ramp` (default sequentialPalette). Keyboard walks days; table = date + value. |
+| `calendar` | one series, `{x: Date, y: value}` | Day cells laid out in week columns, month boundaries hairline-separated, weekday labels in `textMuted`; color from `calendar.ramp` (default: the sequential palette, directed by `theme.colorScheme`). Keyboard walks days; table = date + value. |
 | `radialbar` | `categories` + one value each (or series) | Concentric arcs from `radialbar.innerRadius` outward, each track optionally shown at gridline color; value arcs in categorical slots; direct labels at arc starts. `maxValue` default = data max. |
 | `rose` | `categories` = sectors, values ≥ 0 | Nightingale rose: equal-angle sectors, **radius ∝ √value** (area-true — never radius ∝ value), 2px gaps, sector labels around the perimeter. |
 | `violin` | per category raw `number[]` | Gaussian-KDE density mirrored around each category axis (Silverman bandwidth for `'auto'`), 0.35-alpha fill + 1px outline, optional inner box plot per `violin.showBox`. Table = the 5-number summary + n. |
@@ -451,8 +523,8 @@ interface Chart {
 | `wordcloud` | one series, `{x: term, y: weight}` | Spiral placement with collision avoidance, font size interpolated `minFontSize..maxFontSize` by weight, optional 90° rotation per `wordcloud.rotate`; colors cycle the categorical slots **in order by rank**, text is the mark here (the one place text wears series color). Deterministic layout (seeded) — no `Math.random`. |
 | `sankey` | `data: { nodes: {id, label, color?}[]; links: {source, target, value}[] }` on the first series | Layered node/link layout (longest-path layering, iterative crossing reduction), node bars in categorical slots, links as cubic ribbons at 0.45 alpha colored by source, 2px node gaps. Keyboard walks nodes then their links. Cycles rejected with a clear error. |
 | `gantt` | one series per swimlane or `group` per point; `{x: label, start, end, group?}` | Horizontal task bars on a time x-axis, rows = tasks (or grouped by `group`), 4px rounded ends, optional `gantt.today` marker (2px dashed). Table = task, start, end, duration. |
-| `choropleth` | one series, `{x: featureName, y: value}`; topology via `choropleth.geojson` | Project features per `choropleth.projection`, fit to plot; fill from the sequential ramp; features with no datum get `theme.gridline` fill; borders hairline `theme.axisLine`. Gradient scale legend (the heatmap legend hook). Keyboard walks features in data order. GeoJSON is caller-supplied — **never bundled**. A data row matching NO feature follows `choropleth.unmatched` (below). |
-| `network` | `data: { nodes: {id, label, group?, value?}[]; links: {source, target, value?}[] }` | Deterministic force layout (seeded, fixed iteration count — `network.fixedSeed` default 1; no `Math.random`, no animation loop: simulate then draw), node radius ∝ √value, node color by `group` (categorical slots), links hairline at 0.35 alpha. Keyboard walks nodes by degree; table = node, group, degree, value. |
+| `choropleth` | one series, `{x: featureName, y: value}`; topology via `choropleth.geojson` | Project features per `choropleth.projection`, fit to plot; fill from the sequential ramp (directed by `theme.colorScheme`); features with no datum get `theme.gridline` fill; borders hairline `theme.axisLine`. Gradient scale legend (the heatmap legend hook). Keyboard walks features in data order. GeoJSON is caller-supplied — **never bundled**. A data row matching NO feature follows `choropleth.unmatched` (below). |
+| `network` | `data: { nodes: {id, label, group?, value?}[]; links: {source, target, value?}[] }` | Deterministic force layout (seeded, fixed iteration count — `network.fixedSeed` default 1; no `Math.random`, no animation loop: simulate then draw), node radius ∝ √value, node color by `group` (categorical slots), links hairline at 0.35 alpha. **Keyboard walks each node by degree, then that node's links** (sankey's rule); table = `node / link, group, degree, source, target, value`, links indented under their source. Data of any other shape is rejected with a clear error naming this shape. |
 
 ## Feature specification
 
@@ -582,5 +654,11 @@ ship one.
   stochastic layout must be seeded and deterministic, so renders are
   reproducible and testable.
 - **Hierarchy coloring never invents hues** — children are lightness steps of
-  the parent's slot.
+  the parent's slot, **clamped to the same ≥ 2:1 floor as an ordinal ramp**. A
+  hierarchy cell is a large area fill separated from its neighbours by a 2px
+  SURFACE-coloured gap, so a fill that approaches the surface erases the cell's
+  own boundary. Where a hue has no headroom left to lighten (slot 4, `#eda100`,
+  sits at 2.11:1 on the light surface), the step REVERSES — the child mixes away
+  from the surface instead — rather than shrinking toward invisibility: depth
+  must stay legible without the fill vanishing.
 - **Trendlines and annotations must be visually distinguishable from data.**

@@ -188,8 +188,16 @@ describe('calendar grid math (exact)', () => {
 
 describe('calendar color & range resolution', () => {
   it('defaults the ramp to the sequential palette', () => {
-    expect(calendarRamp({})).toEqual(sequentialPalette);
-    expect(calendarRamp({ calendar: { ramp: ['#000000', '#ffffff'] } })).toEqual(['#000000', '#ffffff']);
+    expect(calendarRamp({}, 'light')).toEqual(sequentialPalette);
+    expect(calendarRamp({ calendar: { ramp: ['#000000', '#ffffff'] } }, 'light')).toEqual(['#000000', '#ffffff']);
+  });
+
+  it('REVERSES the default ramp on a dark surface, and never a custom one', () => {
+    // The busiest day must be the most prominent cell in BOTH modes; on a dark
+    // surface that is the LIGHTEST step, so the default ramp flips.
+    expect(calendarRamp({}, 'dark')).toEqual([...sequentialPalette].reverse());
+    // A caller's ramp is their direction — never silently reversed.
+    expect(calendarRamp({ calendar: { ramp: ['#000000', '#ffffff'] } }, 'dark')).toEqual(['#000000', '#ffffff']);
   });
 
   it('takes the value extent from the data, widening a degenerate one', () => {

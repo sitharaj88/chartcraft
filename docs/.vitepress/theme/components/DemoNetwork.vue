@@ -8,7 +8,8 @@
  * iteration count, Barnes–Hut repulsion, no animation loop and no
  * `Math.random()` — simulate, then draw. The same graph always lands in the
  * same place, and a resize re-fits the same layout rather than producing a new
- * one. Keyboard navigation walks nodes by degree.
+ * one. Keyboard navigation walks each node (degree descending) followed by its
+ * own outgoing links, so every edge is reachable by assistive tech.
  */
 import type { ChartOptions } from '@chartcraft/vue';
 

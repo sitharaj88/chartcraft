@@ -17,7 +17,7 @@ import type { Renderer } from '../render/renderer';
 import type { RenderContext } from '../layout';
 import type { LegendItem } from '../components/legend';
 import type { NavContext, NavPosition } from '../a11y/keyboard';
-import type { A11yTableSpec } from '../a11y';
+import type { A11yTableOptions, A11yTableSpec } from '../a11y';
 import type { DecorationLayer } from '../decorate';
 
 /** Everything the pipeline computed before the definition runs a stage. */
@@ -109,8 +109,25 @@ export interface ChartTypeNeeds {
    * Defaults to `'value-x'` when `horizontal` is in effect, else `'value-y'`.
    */
   axes?: AxisArrangement;
-  /** 'band' forces a category x-axis (bar, boxplot); 'auto' infers from data. */
-  xScale?: 'band' | 'auto';
+  /**
+   * The x-axis KIND this type declares.
+   *
+   * - `'band'` — a category x-axis (bar, boxplot), whatever the data looks like.
+   * - `'time'` — v0.3.2: the x of this type is INHERENTLY temporal (a candle is
+   *   an instant, a task starts on a date). `inferXType` honours the
+   *   declaration, so a bare number is epoch milliseconds BY DECLARATION rather
+   *   than by sniffing — which is the only safe basis, since integer `x` values
+   *   are legal everywhere else. Declaring it makes the tick labels, the tooltip
+   *   header, the a11y table's time column and the keyboard announcement agree
+   *   with each other; a scoped formatting patch would have made only one of
+   *   them right (quality audit E-5 / A-7).
+   *   Explicit caller intent still wins (`xAxis.type`), and so does genuinely
+   *   categorical data — supplied `categories`, or string `x` values — because a
+   *   band placement the rest of the pipeline is already using must not be
+   *   contradicted by a declaration.
+   * - `'auto'` (default) — infer from the data.
+   */
+  xScale?: 'band' | 'auto' | 'time';
   /**
    * v0.3 — how a datum is mapped onto a category band. `'auto'` (default)
    * reads an integer `x` as a band index and falls back to the point index;
@@ -250,8 +267,22 @@ export interface ChartTypeDefinition {
    */
   legendCustomEl?(ctx: DefinitionContext, doc: Document): HTMLElement | null;
 
-  /** Columns + rows for the accessible data table (shape-appropriate). */
-  a11yTable(ctx: DefinitionContext): A11yTableSpec;
+  /**
+   * Columns + rows for the accessible data table (shape-appropriate).
+   *
+   * v0.3.2 — `opts.limit` is an OPTIONAL bound on how many rows to build. The
+   * DOM path passes the resolved `a11y.tableMaxRows`; `exportData()` passes
+   * nothing and gets everything. Honouring it is optional in the strict sense:
+   * the pipeline slices whatever comes back and fills in `A11yTableSpec.total`,
+   * so a definition that ignores `limit` keeps working exactly as before.
+   *
+   * Honour it when building a row is genuinely expensive — one row object with
+   * formatted string cells per DATUM, on a type that can carry a million of them
+   * (the shared cartesian table, the financial table). Then also set
+   * `spec.total` to the row count you WOULD have produced, or the chart will
+   * report the truncated count as the whole truth. See AUTHORING.md.
+   */
+  a11yTable(ctx: DefinitionContext, opts?: A11yTableOptions): A11yTableSpec;
 
   /**
    * v0.3 — OPTIONAL extra prose for the chart's accessible DESCRIPTION, merged

@@ -447,6 +447,19 @@ export interface A11yOptions {
   table?: 'hidden' | 'visible' | 'off';
   /** arrow-key point navigation + live announcements; default true */
   keyboard?: boolean;
+  /**
+   * Maximum rows MATERIALIZED into the DOM data table; default 2000.
+   * `Infinity` removes the bound.
+   *
+   * The table is a real `<table>` with one `<tr>` per datum. Measured on the
+   * bench host that costs ~115 microseconds per row, so raising this to 100,000
+   * buys an ~11.5-second synchronous stall on every data change, and 1,000,000
+   * exhausts the heap. The default exists for that reason, not to hide data:
+   * whatever the cap, the truncation is stated in the table's own `<caption>`
+   * and in the chart's accessible description, and `exportData()` is never
+   * capped — it always returns every row.
+   */
+  tableMaxRows?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -509,6 +522,12 @@ export interface Theme {
   down: string;
   /** waterfall totals & neutral marks. light '#52514e', dark '#c3c2b7' */
   neutral: string;
+  /**
+   * v0.3.1 — set by the pipeline (never by a caller) when `forced-colors:
+   * active` is in effect and every color above is a CSS system-color keyword.
+   * Read it to skip decoration that assumes an authored palette.
+   */
+  forcedColors?: boolean;
 }
 
 // ---------------------------------------------------------------------------

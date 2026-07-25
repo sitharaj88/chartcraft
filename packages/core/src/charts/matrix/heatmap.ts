@@ -2,8 +2,9 @@
  * Heatmap chart-type definition (v0.2 contract).
  *
  * Each series is one ROW; its data aligns to `categories` (the COLUMNS).
- * Cell color comes from the sequential `heatmap.ramp` (default:
- * sequentialPalette) scaled over `heatmap.min`/`heatmap.max` (default: the
+ * Cell color comes from the sequential `heatmap.ramp` (default: the sequential
+ * palette DIRECTED by `theme.colorScheme` — low values recede toward the
+ * surface in either mode) scaled over `heatmap.min`/`heatmap.max` (default: the
  * data extent), interpolating linearly in ramp index. Cells are separated
  * by 1px surface gaps. The legend is a horizontal gradient color-scale bar
  * with min/max labels (non-toggleable), mounted through the registry's
@@ -17,7 +18,7 @@ import { axisTickFont } from '../../layout';
 import type { DataModel, ResolvedOptions } from '../../model';
 import type { ChartTypeDefinition, DefinitionContext } from '../registry';
 import type { A11yTableSpec } from '../../a11y';
-import { sequentialPalette } from '../../theme';
+import { resolveSequentialRamp } from '../../theme';
 import { formatValue } from '../../util';
 import { rampColor } from './color-scale';
 
@@ -51,10 +52,14 @@ export interface HeatmapGeomExtra {
   ramp: string[];
 }
 
-/** Resolved ramp (default: the sequential blue palette). */
-export function heatmapRamp(opts: Pick<ResolvedOptions, 'heatmap'>): string[] {
-  const ramp = opts.heatmap?.ramp;
-  return ramp && ramp.length > 0 ? [...ramp] : [...sequentialPalette];
+/**
+ * Resolved ramp: the caller's `heatmap.ramp` verbatim, else the default
+ * sequential blue palette ORIENTED for the theme's surface — low values recede
+ * toward the surface in both modes, so the highest-magnitude cells are always
+ * the most prominent ones. See `theme#sequentialRampFor`.
+ */
+export function heatmapRamp(opts: Pick<ResolvedOptions, 'heatmap'>, scheme: 'light' | 'dark'): string[] {
+  return resolveSequentialRamp(opts.heatmap?.ramp, scheme);
 }
 
 /**
@@ -138,7 +143,7 @@ export const heatmapDefinition: ChartTypeDefinition = {
     };
 
     const [min, max] = heatmapExtent(model, opts.heatmap);
-    const ramp = heatmapRamp(opts);
+    const ramp = heatmapRamp(opts, theme.colorScheme);
 
     const rowCount = visible.length;
     const cw = cols > 0 ? grid.w / cols : grid.w;
@@ -254,7 +259,7 @@ export const heatmapDefinition: ChartTypeDefinition = {
   legendCustomEl(ctx: DefinitionContext, doc: Document): HTMLElement | null {
     const { theme, model, opts } = ctx;
     const [min, max] = heatmapExtent(model, opts.heatmap);
-    const ramp = heatmapRamp(opts);
+    const ramp = heatmapRamp(opts, theme.colorScheme);
 
     const wrap = doc.createElement('div');
     wrap.className = 'chartcraft-heatmap-legend';

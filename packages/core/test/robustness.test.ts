@@ -60,6 +60,23 @@ const DOCUMENTED_REJECTIONS: Partial<Record<ChartType, { scenarios: string[]; be
   radar: { scenarios: ['negative', 'infinity'], because: /must be >= 0/ },
   rose: { scenarios: ['negative', 'infinity'], because: /must be >= 0/ },
   radialbar: { scenarios: ['negative', 'infinity'], because: /must be >= 0/ },
+  // v0.3.2 (ruling E-9): a value list is not an OHLC series, and these two used
+  // to draw nothing and say nothing about it. Same line as gantt — empty and
+  // all-null data are still an empty chart, because no data is not wrong data.
+  candlestick: {
+    scenarios: ['single-datum', 'negative', 'nan', 'infinity', 'zeros', 'duplicate-categories'],
+    because: /must be OHLC entries/,
+  },
+  ohlc: {
+    scenarios: ['single-datum', 'negative', 'nan', 'infinity', 'zeros', 'duplicate-categories'],
+    because: /must be OHLC entries/,
+  },
+  // v0.3.2 (ruling E-9): the SAME graph payload sankey demands, so the same
+  // diagnostic. This was the sharpest of the three silent cases.
+  network: {
+    scenarios: ['single-datum', 'negative', 'nan', 'infinity', 'zeros', 'duplicate-categories'],
+    because: /expects its graph on the FIRST series/,
+  },
 };
 
 const SCENARIOS: { name: string; series: unknown }[] = [
@@ -74,11 +91,12 @@ const SCENARIOS: { name: string; series: unknown }[] = [
 ];
 
 /**
- * Types that render an EMPTY chart rather than throwing when the data shape is
- * wrong for them (see the pinned test below). Listed once so the degenerate-data
- * sweep and that test cannot disagree about which types they are.
+ * Types that USED to render an empty chart rather than throwing when the data
+ * shape was wrong for them (audit finding C-5). Ruling E-9 made all three loud;
+ * they are listed here so the sweep and the test below cannot disagree about
+ * which types the ruling covered.
  */
-const SILENTLY_EMPTY_ON_WRONG_SHAPE = new Set<ChartType>(['candlestick', 'ohlc', 'network']);
+const LOUD_ON_WRONG_SHAPE = new Set<ChartType>(['candlestick', 'ohlc', 'network']);
 
 function rejects(type: ChartType, scenario: string): RegExp | null {
   const entry = DOCUMENTED_REJECTIONS[type];
@@ -131,11 +149,9 @@ describe('degenerate data: every type either survives or rejects it on purpose',
         expect(canvasOf(el).getAttribute('aria-label'), type).toBeTruthy();
         // Data points survive a duplicate LABEL: the category index maps every
         // duplicate to the first slot, which is a labelling decision, not a data
-        // one. The exceptions have nothing to do with duplicates — bare numbers
-        // are simply the wrong SHAPE for those types (see the pinned test below).
+        // one.
         const rows = chart.exportData({ format: 'csv' }).split('\n').length - 1;
-        if (SILENTLY_EMPTY_ON_WRONG_SHAPE.has(type)) expect(rows, type).toBe(0);
-        else expect(rows, type).toBeGreaterThan(0);
+        expect(rows, type).toBeGreaterThan(0);
         chart.destroy();
       }
       cleanupDom();
@@ -143,33 +159,43 @@ describe('degenerate data: every type either survives or rejects it on purpose',
   });
 
   /**
-   * REPORTED, NOT FIXED (QUALITY-AUDIT.md, finding C-5). Given data of the wrong
-   * SHAPE, these three render an entirely empty chart — no marks, no table rows,
-   * a header-only CSV — and say nothing, while their direct peers throw a
-   * diagnostic for the same mistake:
+   * FIXED by ruling E-9. This test used to pin the OPPOSITE: given data of the
+   * wrong SHAPE these three rendered an entirely empty chart — no marks, no
+   * table rows, a header-only CSV — and said nothing, while their direct peers
+   * threw a diagnostic for the same mistake. A blank chart with no error is the
+   * worst failure mode available: it reads as "no data" and sends the developer
+   * hunting in the wrong place.
    *
-   *   `candlestick`/`ohlc` with no o/h/l/c   vs  `gantt`: "data must be objects
-   *                                              { x: label, start, end, group? }"
-   *   `network` with no { nodes, links }     vs  `sankey`: "expects its graph on
-   *                                              the FIRST series as data: …"
-   *
-   * `network` is the sharper case: it is the SAME graph payload, validated by the
-   * same `isGraphData` narrowing, and only one of the two types complains.
-   * Pinned here so the inconsistency lives in the suite, not just in a review.
+   * They now throw, naming the shape they expect, exactly as `gantt` and
+   * `sankey` do — and the error must remain ACTIONABLE, not merely present.
    */
-  it('these types render an empty chart in silence where their peers throw — pinned inconsistency', () => {
-    const expected: Record<string, string> = {
-      candlestick: 'Time,Open,High,Low,Close',
-      ohlc: 'Time,Open,High,Low,Close',
-      network: 'Node,Group,Degree,Value',
+  it('these types throw a shape diagnostic where they used to render empty in silence', () => {
+    const mustSay: Record<string, RegExp[]> = {
+      candlestick: [/candlestick/, /\[x, open, high, low, close\]/, /\{ x, o, h, l, c \}/, /'S'/],
+      ohlc: [/ohlc/, /\[x, open, high, low, close\]/, /'S'/],
+      network: [/network/, /nodes/, /links/, /source/, /target/],
     };
-    for (const type of SILENTLY_EMPTY_ON_WRONG_SHAPE) {
-      const { el, chart } = mount({ type, data: { series: [{ name: 'S', data: [1, 2, 3] }] } } as ChartOptions);
-      // Header-only export: no marks, no table rows, no diagnostic.
-      expect(chart.exportData({ format: 'csv' }), type).toBe(expected[type]);
-      expect(canvasOf(el).getAttribute('aria-label'), type).toBeTruthy();
-      chart.destroy();
+    for (const type of LOUD_ON_WRONG_SHAPE) {
+      let message = '';
+      try {
+        mount({ type, data: { series: [{ name: 'S', data: [1, 2, 3] }] } } as ChartOptions);
+      } catch (e) {
+        message = (e as Error).message;
+      }
+      expect(message, type).toContain('@chartcraft/core');
+      for (const re of mustSay[type] as RegExp[]) expect(message, type).toMatch(re);
       cleanupDom();
+    }
+  });
+
+  it('...but EMPTY data is still an empty chart on all three (no data is not wrong data)', () => {
+    for (const type of LOUD_ON_WRONG_SHAPE) {
+      for (const series of [[], [{ name: 'S', data: [] }], [{ name: 'S', data: [null, null] }]]) {
+        const { el, chart } = mount({ type, data: { series } } as ChartOptions);
+        expect(canvasOf(el).getAttribute('aria-label'), type).toBeTruthy();
+        chart.destroy();
+        cleanupDom();
+      }
     }
   });
 
@@ -744,5 +770,37 @@ describe('decorations gate on the resolved per-series mark kind, not the root ty
       const opts = resolveOptions(options);
       expect(trendlineSeries(buildModel(opts, new Map()), opts), type).toHaveLength(1);
     }
+  });
+});
+
+describe('buildModel retains the pre-lossy series for the accessible surfaces', () => {
+  const series = (n: number) => [
+    { name: 'S', data: Array.from({ length: n }, (_, i) => [i, i % 97] as [number, number]) },
+  ];
+
+  it('sets sourcePoints only when downsampling actually drops rows', () => {
+    const under = buildModel(resolveOptions({ type: 'line', downsample: { threshold: 5000 }, data: { series: series(100) } } as ChartOptions), new Map());
+    // Below the threshold nothing is dropped, so nothing is retained — the
+    // common case must not pay for a second array reference or a copy.
+    expect(under.series[0]!.sourcePoints).toBeUndefined();
+    expect(under.series[0]!.points).toHaveLength(100);
+
+    const over = buildModel(resolveOptions({ type: 'line', downsample: { threshold: 5000 }, data: { series: series(60_000) } } as ChartOptions), new Map());
+    expect(over.series[0]!.points.length).toBeLessThanOrEqual(5000);
+    expect(over.series[0]!.sourcePoints).toHaveLength(60_000);
+  });
+
+  it('sourcePoints is captured before the ZOOM WINDOW as well as before LTTB', () => {
+    const opts = resolveOptions({ type: 'line', downsample: { threshold: 5000 }, data: { series: series(60_000) } } as ChartOptions);
+    const zoomed = buildModel(opts, new Map(), { x: [1000, 1100] });
+    // The drawn points are the window; the retained ones are the whole series.
+    expect(zoomed.series[0]!.points.length).toBeLessThan(500);
+    expect(zoomed.series[0]!.sourcePoints).toHaveLength(60_000);
+  });
+
+  it('disabling downsampling leaves points whole and retains nothing', () => {
+    const model = buildModel(resolveOptions({ type: 'line', downsample: { enabled: false }, data: { series: series(60_000) } } as ChartOptions), new Map());
+    expect(model.series[0]!.points).toHaveLength(60_000);
+    expect(model.series[0]!.sourcePoints).toBeUndefined();
   });
 });

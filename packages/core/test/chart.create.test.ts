@@ -14,7 +14,7 @@ const data = {
 
 describe('createChart', () => {
   it('exports the package version', () => {
-    expect(version).toBe('0.2.0');
+    expect(version).toBe('0.3.0');
   });
 
   it('validates inputs', () => {

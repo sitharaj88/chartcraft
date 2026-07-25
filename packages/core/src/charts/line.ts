@@ -6,7 +6,8 @@
  * definition passes the line-kind series in combo z-order.
  */
 import type { RenderContext } from '../layout';
-import { seriesColor, type NormalizedSeries } from '../model';
+import { seriesColor, seriesDash, seriesMarker, type NormalizedSeries } from '../model';
+import { drawMarker } from './markers';
 import { linePath } from './curves';
 
 export const MARKER_RADIUS = 4; // 8px diameter
@@ -27,15 +28,22 @@ export function renderLineKind(ctx: RenderContext, indices: readonly number[]): 
       const pts = pos[si];
       if (!pts || pts.length === 0) continue;
       const color = seriesColor(s, theme);
+      // Composite encoding: series past the validated 8 palette slots reuse a
+      // hue, so the dash pattern and marker shape carry their identity instead.
+      // Both are no-ops (solid, circle) for every series inside the 8.
+      const dash = seriesDash(s, theme);
+      const shape = seriesMarker(s, theme);
       const cmds = linePath(pts, s.curve);
       if (cmds.length > 0) {
-        r.path(cmds, { stroke: { color, width: s.lineWidth, join: 'round', cap: 'round' } });
+        r.path(cmds, {
+          stroke: { color, width: s.lineWidth, join: 'round', cap: 'round', ...(dash ? { dash } : {}) },
+        });
       }
       const withMarkers = markersVisible(s, pts.length);
       if (withMarkers) {
         for (const p of pts) {
           if (!p) continue;
-          r.circle(p.x, p.y, MARKER_RADIUS, {
+          drawMarker(r, shape, p.x, p.y, MARKER_RADIUS, {
             fill: color,
             stroke: { color: theme.surface, width: MARKER_RING },
           });
@@ -46,7 +54,7 @@ export function renderLineKind(ctx: RenderContext, indices: readonly number[]): 
       if (hover && (hover.si === si || ctx.opts.tooltip.shared)) {
         const hp = pts[hover.pi];
         if (hp) {
-          r.circle(hp.x, hp.y, MARKER_RADIUS + 1.5, {
+          drawMarker(r, shape, hp.x, hp.y, MARKER_RADIUS + 1.5, {
             fill: color,
             stroke: { color: theme.surface, width: MARKER_RING },
           });
