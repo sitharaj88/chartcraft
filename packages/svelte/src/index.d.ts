@@ -31,6 +31,20 @@ export type {
   ChartEventMap,
   PointEvent,
   Theme,
+  // v0.3 feature options & payloads
+  DataLabelOptions,
+  Annotation,
+  ZoomOptions,
+  ZoomRange,
+  ErrorBarOptions,
+  TrendlineOptions,
+  GeoFeatureCollection,
+  // v0.3 decoration/overlay plumbing (advanced: custom decorators)
+  Decorator,
+  DecoratorContext,
+  DecoratorHost,
+  DecorationLayer,
+  Viewport,
 } from '@chartcraft/core';
 
 export interface ChartProps {
@@ -48,10 +62,14 @@ export interface ChartEvents {
   pointenter: CustomEvent<PointEvent>;
   pointleave: CustomEvent<PointEvent>;
   legendtoggle: CustomEvent<ChartEventMap['legendtoggle']>;
+  // v0.3
+  zoom: CustomEvent<ChartEventMap['zoom']>;
+  annotationclick: CustomEvent<ChartEventMap['annotationclick']>;
 }
 
 /**
- * `<Chart {options} on:pointclick on:pointenter on:pointleave on:legendtoggle />`
+ * `<Chart {options} on:pointclick on:pointenter on:pointleave on:legendtoggle
+ *   on:zoom on:annotationclick />`
  * Instance access: `bind:this={component}` then `component.getChart()`.
  */
 export class Chart extends SvelteComponent<ChartProps, ChartEvents, Record<string, never>> {
@@ -82,9 +100,37 @@ export class SunburstChart extends TypedChart {}
 export class FunnelChart extends TypedChart {}
 export class RadarChart extends TypedChart {}
 export class GaugeChart extends TypedChart {}
+// v0.3 chart types
+export class RangeareaChart extends TypedChart {}
+export class BulletChart extends TypedChart {}
+export class DumbbellChart extends TypedChart {}
+export class LollipopChart extends TypedChart {}
+export class SlopeChart extends TypedChart {}
+export class StreamgraphChart extends TypedChart {}
+export class MarimekkoChart extends TypedChart {}
+export class PyramidChart extends TypedChart {}
+export class CalendarChart extends TypedChart {}
+export class RadialbarChart extends TypedChart {}
+export class RoseChart extends TypedChart {}
+export class ViolinChart extends TypedChart {}
+export class ParallelChart extends TypedChart {}
+export class IcicleChart extends TypedChart {}
+export class CirclepackChart extends TypedChart {}
+export class WordcloudChart extends TypedChart {}
+export class SankeyChart extends TypedChart {}
+export class GanttChart extends TypedChart {}
+export class ChoroplethChart extends TypedChart {}
+export class NetworkChart extends TypedChart {}
 
 /** Core event names bridged by every component. */
-export const EVENTS: readonly ['pointclick', 'pointenter', 'pointleave', 'legendtoggle'];
+export const EVENTS: readonly [
+  'pointclick',
+  'pointenter',
+  'pointleave',
+  'legendtoggle',
+  'zoom',
+  'annotationclick',
+];
 
 /** Merge a fixed chart type into type-less options (never mutates the input). */
 export function withType(options: Omit<ChartOptions, 'type'>, type: ChartType): ChartOptions;

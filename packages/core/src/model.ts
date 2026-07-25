@@ -9,24 +9,31 @@
  */
 import type {
   A11yOptions,
+  Annotation,
   AxisOptions,
   ChartData,
   ChartOptions,
   ChartType,
+  DataLabelOptions,
   LegendOptions,
   SeriesKind,
   Theme,
   TooltipPoint,
+  ZoomOptions,
 } from './types';
 import {
   deriveCategories,
+  dataValuesOf,
   downsampleNormalized,
+  hasRangeData,
   inferXType,
   normalizeSeriesData,
+  windowNormalized,
   type Category,
   type NormalizedPoint,
   type XType,
 } from './data/normalize';
+import { extendYDomainForDecorators, normalizeViewport, type Viewport } from './decorate';
 import { computeStacks, stackExtent } from './data/stack';
 import { getChartType, type ChartTypeDefinition } from './charts/registry';
 import { registerBuiltinChartTypes } from './charts';
@@ -53,6 +60,13 @@ export interface ResolvedLegend {
   show: boolean;
   position: 'top' | 'bottom' | 'right';
   interactive: boolean;
+  /**
+   * v0.3 — true when the CALLER did not set `legend`/`legend.show`, i.e. `show`
+   * is a policy decision the pipeline (or a type's `resolveOptions`) made and a
+   * later stage may still override. `ChartTypeDefinition.resolveLegend` consults
+   * it so a measured layout decision never clobbers an explicit choice.
+   */
+  auto: boolean;
 }
 
 export interface ResolvedTooltip {
@@ -65,6 +79,25 @@ export interface ResolvedAnimation {
   enabled: boolean;
   duration: number;
   easing: 'linear' | 'ease-out' | 'ease-in-out';
+}
+
+/** v0.3 — resolved `dataLabels` (behavior lives in the data-label decorator). */
+export interface ResolvedDataLabels {
+  show: boolean;
+  /** Selectivity is mandatory; 'auto' is the default when enabled. */
+  select: NonNullable<DataLabelOptions['select']>;
+  position: NonNullable<DataLabelOptions['position']>;
+  format?: NonNullable<DataLabelOptions['format']>;
+}
+
+/** v0.3 — resolved `zoom` (behavior lives in the zoom decorator). */
+export interface ResolvedZoom {
+  enabled: boolean;
+  axis: NonNullable<ZoomOptions['axis']>;
+  wheel: boolean;
+  drag: boolean;
+  pan: boolean;
+  minSpan?: number;
 }
 
 export interface ResolvedOptions {
@@ -90,6 +123,23 @@ export interface ResolvedOptions {
   heatmap?: ChartOptions['heatmap'];
   gauge?: ChartOptions['gauge'];
   waterfall?: ChartOptions['waterfall'];
+  // v0.3 cross-cutting features (consumed by decorators, not by types).
+  dataLabels: ResolvedDataLabels;
+  annotations: Annotation[];
+  zoom: ResolvedZoom;
+  // v0.3 per-type option blocks (passed through for the type definitions).
+  rangearea?: ChartOptions['rangearea'];
+  bullet?: ChartOptions['bullet'];
+  calendar?: ChartOptions['calendar'];
+  violin?: ChartOptions['violin'];
+  radialbar?: ChartOptions['radialbar'];
+  rose?: ChartOptions['rose'];
+  sankey?: ChartOptions['sankey'];
+  gantt?: ChartOptions['gantt'];
+  wordcloud?: ChartOptions['wordcloud'];
+  network?: ChartOptions['network'];
+  choropleth?: ChartOptions['choropleth'];
+  parallel?: ChartOptions['parallel'];
 }
 
 const DEFAULT_PADDING = 12;
@@ -117,6 +167,7 @@ export function resolveOptions(raw: ChartOptions): ResolvedOptions {
     show: legendRaw.show ?? seriesCount >= 2,
     position: legendRaw.position ?? 'top',
     interactive: legendRaw.interactive ?? true,
+    auto: legendRaw.show === undefined,
   };
 
   const tooltipRaw = typeof raw.tooltip === 'boolean' ? { show: raw.tooltip } : (raw.tooltip ?? {});
@@ -135,6 +186,27 @@ export function resolveOptions(raw: ChartOptions): ResolvedOptions {
           duration: raw.animation?.duration ?? 300,
           easing: raw.animation?.easing ?? 'ease-out',
         };
+
+  // v0.3 dataLabels: default off; when enabled, selectivity defaults to 'auto'
+  // (labels extremes/endpoints only and drops colliding labels).
+  const dlRaw: DataLabelOptions = typeof raw.dataLabels === 'boolean' ? { show: raw.dataLabels } : (raw.dataLabels ?? {});
+  const dataLabels: ResolvedDataLabels = {
+    show: dlRaw.show ?? (raw.dataLabels !== undefined && raw.dataLabels !== false),
+    select: dlRaw.select ?? 'auto',
+    position: dlRaw.position ?? 'auto',
+  };
+  if (dlRaw.format) dataLabels.format = dlRaw.format;
+
+  // v0.3 zoom: default off; axis 'x'; wheel/drag/pan on once enabled.
+  const zoomRaw: ZoomOptions = typeof raw.zoom === 'boolean' ? { enabled: raw.zoom } : (raw.zoom ?? {});
+  const zoom: ResolvedZoom = {
+    enabled: zoomRaw.enabled ?? (raw.zoom !== undefined && raw.zoom !== false),
+    axis: zoomRaw.axis ?? 'x',
+    wheel: zoomRaw.wheel ?? true,
+    drag: zoomRaw.drag ?? true,
+    pan: zoomRaw.pan ?? true,
+  };
+  if (zoomRaw.minSpan !== undefined) zoom.minSpan = zoomRaw.minSpan;
 
   const resolved: ResolvedOptions = {
     type,
@@ -158,6 +230,9 @@ export function resolveOptions(raw: ChartOptions): ResolvedOptions {
       ...(raw.a11y?.title !== undefined ? { title: raw.a11y.title } : {}),
       ...(raw.a11y?.description !== undefined ? { description: raw.a11y.description } : {}),
     },
+    dataLabels,
+    annotations: raw.annotations ? [...raw.annotations] : [],
+    zoom,
   };
   if (raw.title !== undefined) resolved.title = raw.title;
   if (raw.subtitle !== undefined) resolved.subtitle = raw.subtitle;
@@ -167,6 +242,18 @@ export function resolveOptions(raw: ChartOptions): ResolvedOptions {
   if (raw.heatmap !== undefined) resolved.heatmap = raw.heatmap;
   if (raw.gauge !== undefined) resolved.gauge = raw.gauge;
   if (raw.waterfall !== undefined) resolved.waterfall = raw.waterfall;
+  if (raw.rangearea !== undefined) resolved.rangearea = raw.rangearea;
+  if (raw.bullet !== undefined) resolved.bullet = raw.bullet;
+  if (raw.calendar !== undefined) resolved.calendar = raw.calendar;
+  if (raw.violin !== undefined) resolved.violin = raw.violin;
+  if (raw.radialbar !== undefined) resolved.radialbar = raw.radialbar;
+  if (raw.rose !== undefined) resolved.rose = raw.rose;
+  if (raw.sankey !== undefined) resolved.sankey = raw.sankey;
+  if (raw.gantt !== undefined) resolved.gantt = raw.gantt;
+  if (raw.wordcloud !== undefined) resolved.wordcloud = raw.wordcloud;
+  if (raw.network !== undefined) resolved.network = raw.network;
+  if (raw.choropleth !== undefined) resolved.choropleth = raw.choropleth;
+  if (raw.parallel !== undefined) resolved.parallel = raw.parallel;
 
   // Per-type option resolution (legend auto policy, tooltip defaults, chrome).
   def.resolveOptions?.(resolved, raw);
@@ -210,8 +297,25 @@ export interface DataModel {
   xDomain: [number, number] | null;
   /** Raw y extent over visible series (before nice/overrides). */
   yDomain: [number, number];
+  /**
+   * v0.3 — `yDomain` must be used VERBATIM as the value-axis domain (no
+   * `nice()` widening). Set by a definition's `extendValueDomain` returning
+   * `{ exact: true }`; an explicit axis `min`/`max` still wins.
+   */
+  valueDomainExact: boolean;
+  /**
+   * v0.3 — a datum's category band is its POINT INDEX, never its `x`
+   * (`ChartTypeNeeds.bandIndex: 'position'`). `bandIndexFor` obeys it.
+   */
+  bandByPosition: boolean;
   /** Longest series length. */
   maxLen: number;
+  /**
+   * v0.3 — active zoom viewport (continuous domain overrides), or null.
+   * Retained on the model so layout, decorators and definitions can read the
+   * visible window. Set it through `Chart.zoomTo` / `DecoratorHost`.
+   */
+  viewport: Viewport | null;
 }
 
 export function seriesColor(s: NormalizedSeries, theme: Theme): string {
@@ -232,16 +336,30 @@ const STACKING_KINDS: readonly SeriesKind[] = ['bar', 'area'];
  * `paletteSlots` maps series identity -> palette slot; new identities are
  * assigned the next free slot so colors follow identity across updates.
  */
-export function buildModel(opts: ResolvedOptions, paletteSlots: Map<string, number>): DataModel {
+export function buildModel(
+  opts: ResolvedOptions,
+  paletteSlots: Map<string, number>,
+  viewportIn?: Viewport | null,
+): DataModel {
   const type = opts.type;
-  const needs = chartDef(type).needs;
+  const def = chartDef(type);
+  const needs = def.needs;
   const stacked = opts.stacked && (needs.stacking ?? false);
   const horizontal = opts.horizontal && (needs.horizontal ?? false);
+  const viewport = normalizeViewport(viewportIn);
 
   const rawCategories = opts.data.categories ?? null;
 
-  // First pass: normalize points against provided categories.
-  let seriesPoints = opts.data.series.map((s) => normalizeSeriesData(s.data, rawCategories));
+  // First pass: normalize points against provided categories. `needs.triple`
+  // selects the 3-tuple reading ('size' = [x,y,r], 'range' = [x,low,high]);
+  // lowKey/highKey remap custom object-data field names into low/high.
+  let seriesPoints = opts.data.series.map((s) =>
+    normalizeSeriesData(dataValuesOf(s.data), rawCategories, {
+      triple: needs.triple ?? 'size',
+      ...(s.lowKey !== undefined ? { lowKey: s.lowKey } : {}),
+      ...(s.highKey !== undefined ? { highKey: s.highKey } : {}),
+    }),
+  );
 
   // Derive categories from string x values when none were provided.
   let categories: Category[] | null = rawCategories ? [...rawCategories] : null;
@@ -282,8 +400,13 @@ export function buildModel(opts: ResolvedOptions, paletteSlots: Map<string, numb
     }
     // Combo: per-series override on cartesian roots. Horizontal charts render
     // every series as the base kind (mixed marks are vertical-only).
-    const kind: SeriesKind | null =
+    let kind: SeriesKind | null =
       baseKind === null ? null : horizontal ? baseKind : ((needs.combo && s.type) || baseKind);
+    // v0.3 `needs.rangeFromData`: on a range root, a series whose data carries a
+    // full low/high pair IS a band. An explicit per-series `type` still wins.
+    if (kind !== null && needs.rangeFromData === true && !s.type && hasRangeData(seriesPoints[i] ?? [])) {
+      kind = 'rangearea';
+    }
     const ns: NormalizedSeries = {
       id,
       name: s.name,
@@ -300,17 +423,24 @@ export function buildModel(opts: ResolvedOptions, paletteSlots: Map<string, numb
     return ns;
   });
 
-  // Downsample (line/scatter kinds and unstacked areas, continuous x, above threshold).
+  // Downsample (line/scatter kinds and unstacked areas, continuous x, above
+  // threshold). v0.3: when a zoom VIEWPORT is set, downsampling runs against
+  // the visible window instead of the whole series — so zooming into 1M points
+  // reveals real detail. The window is only applied to series that would
+  // otherwise be downsampled; below the threshold nothing is touched, which
+  // keeps every v0.2 path byte-identical.
   const continuousX = xType === 'linear' || xType === 'time' || xType === 'log';
+  const window = continuousX ? (viewport?.x ?? null) : null;
   if ((needs.downsample ?? false) && opts.downsample.enabled && continuousX) {
+    const threshold = opts.downsample.threshold;
     for (const s of series) {
       const eligible =
         s.kind !== null &&
         DOWNSAMPLE_KINDS.includes(s.kind) &&
         !(stacked && STACKING_KINDS.includes(s.kind));
-      if (eligible && s.points.length > opts.downsample.threshold) {
-        s.points = downsampleNormalized(s.points, opts.downsample.threshold);
-      }
+      if (!eligible || s.points.length <= threshold) continue;
+      const source = window ? windowNormalized(s.points, window[0], window[1]) : s.points;
+      s.points = source.length > threshold ? downsampleNormalized(source, threshold) : source;
     }
   }
 
@@ -341,6 +471,16 @@ export function buildModel(opts: ResolvedOptions, paletteSlots: Map<string, numb
   for (const s of visible) {
     if (s.y1) continue; // covered by its stack extent
     for (const p of s.points) {
+      // v0.3: range bounds are values too (rangearea band, dumbbell endpoints,
+      // bullet range). They are only ever set when the caller supplied them.
+      if (typeof p.low === 'number') {
+        if (p.low < min) min = p.low;
+        if (p.low > max) max = p.low;
+      }
+      if (typeof p.high === 'number') {
+        if (p.high < min) min = p.high;
+        if (p.high > max) max = p.high;
+      }
       if (p.y === null) continue;
       if (p.y < min) min = p.y;
       if (p.y > max) max = p.y;
@@ -350,7 +490,12 @@ export function buildModel(opts: ResolvedOptions, paletteSlots: Map<string, numb
     if (lo < min) min = lo;
     if (hi > max) max = hi;
   }
-  if (!Number.isFinite(min)) {
+  // Non-finite extents mean "no usable values" — either nothing was visible
+  // (min/max never moved off ±Infinity) or a stacking/extension stage produced
+  // an infinity. `normalizeSeriesData` already folds non-finite DATA to null, so
+  // this is the belt to that braces: an infinite value domain makes every scale
+  // return NaN, which paints nothing and reports nothing.
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
     min = 0;
     max = 1;
   }
@@ -389,7 +534,7 @@ export function buildModel(opts: ResolvedOptions, paletteSlots: Map<string, numb
 
   const maxLen = series.reduce((m, s) => Math.max(m, s.points.length), 0);
 
-  return {
+  const model: DataModel = {
     type,
     series,
     categories,
@@ -398,15 +543,46 @@ export function buildModel(opts: ResolvedOptions, paletteSlots: Map<string, numb
     horizontal,
     xDomain,
     yDomain,
+    valueDomainExact: false,
+    bandByPosition: needs.bandIndex === 'position',
     maxLen,
+    viewport,
   };
+
+  // v0.3: the TYPE may widen the value domain first (`extendValueDomain` — the
+  // definition-side counterpart of `Decorator.extendYDomain`): a bullet's
+  // qualitative ranges/target, a boxplot's whiskers and outliers read from RAW
+  // number[] samples, a waterfall's running totals. Union only, never narrows.
+  const typeExt = def.extendValueDomain?.(model, opts) ?? null;
+  if (typeExt) {
+    const ext = Array.isArray(typeExt) ? { domain: typeExt } : typeExt;
+    const [a, b] = ext.domain;
+    let [lo, hi] = model.yDomain;
+    if (Number.isFinite(a) && a < lo) lo = a;
+    if (Number.isFinite(b) && b > hi) hi = b;
+    model.yDomain = [lo, hi];
+    if (ext.exact === true) model.valueDomainExact = true;
+  }
+
+  // Then pipeline-level decorators may widen it further (error bars are
+  // "included in the y-domain"). With no decorator registered this is a no-op.
+  const before = model.yDomain;
+  const extended = extendYDomainForDecorators(before, model, opts);
+  if (extended[0] !== before[0] || extended[1] !== before[1]) model.yDomain = extended;
+
+  return model;
 }
 
 /**
  * Band index for a datum: integer x values within the category range address
  * bands directly; otherwise the point index is used.
+ *
+ * v0.3: a type may declare `needs.bandIndex: 'position'` (violin), which makes
+ * the point index authoritative — its normalized `x` is an artifact of folding
+ * a raw `number[]` sample into a tuple shape and means nothing.
  */
 export function bandIndexFor(model: DataModel, xv: number | null, pi: number): number {
+  if (model.bandByPosition) return pi;
   const n = model.categories?.length ?? 0;
   if (xv !== null && Number.isInteger(xv) && xv >= 0 && (n === 0 || xv < n)) return xv;
   return pi;

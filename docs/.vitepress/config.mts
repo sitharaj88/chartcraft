@@ -11,8 +11,13 @@ export default defineConfig({
 
   themeConfig: {
     nav: [
-      { text: 'Guide', link: '/getting-started', activeMatch: '^/(getting-started|accessibility|performance)' },
+      {
+        text: 'Guide',
+        link: '/getting-started',
+        activeMatch: '^/(getting-started|accessibility|performance|extensibility)',
+      },
       { text: 'Concepts', link: '/concepts/data-model', activeMatch: '^/concepts/' },
+      { text: 'Features', link: '/features/error-bars', activeMatch: '^/features/' },
       { text: 'Frameworks', link: '/frameworks/react', activeMatch: '^/frameworks/' },
       { text: 'API', link: '/api/core', activeMatch: '^/api' },
       { text: 'Examples', link: '/examples/', activeMatch: '^/examples/' },
@@ -26,6 +31,7 @@ export default defineConfig({
           { text: 'Getting started', link: '/getting-started' },
           { text: 'Accessibility', link: '/accessibility' },
           { text: 'Performance', link: '/performance' },
+          { text: 'Extensibility', link: '/extensibility' },
           { text: 'Roadmap', link: '/roadmap' },
         ],
       },
@@ -36,6 +42,17 @@ export default defineConfig({
           { text: 'Scales and axes', link: '/concepts/scales-and-axes' },
           { text: 'Theming', link: '/concepts/theming' },
           { text: 'Interactions', link: '/concepts/interactions' },
+        ],
+      },
+      {
+        text: 'Features',
+        items: [
+          { text: 'Error bars', link: '/features/error-bars' },
+          { text: 'Trendlines', link: '/features/trendlines' },
+          { text: 'Data labels', link: '/features/data-labels' },
+          { text: 'Annotations', link: '/features/annotations' },
+          { text: 'Zoom, pan & brush', link: '/features/zoom-pan-brush' },
+          { text: 'Export', link: '/features/export' },
         ],
       },
       {
@@ -58,13 +75,20 @@ export default defineConfig({
               { text: 'Bar', link: '/examples/bar' },
               { text: 'Scatter', link: '/examples/scatter' },
               { text: 'Bubble', link: '/examples/bubble' },
+              { text: 'Lollipop', link: '/examples/lollipop' },
+              { text: 'Slope', link: '/examples/slope' },
+              { text: 'Dumbbell', link: '/examples/dumbbell' },
+              { text: 'Range area', link: '/examples/rangearea' },
             ],
           },
           {
-            text: 'Part-to-whole & stages',
+            text: 'Part-to-whole & composition',
             items: [
               { text: 'Pie & donut', link: '/examples/pie' },
               { text: 'Funnel', link: '/examples/funnel' },
+              { text: 'Pyramid', link: '/examples/pyramid' },
+              { text: 'Marimekko', link: '/examples/marimekko' },
+              { text: 'Streamgraph', link: '/examples/streamgraph' },
             ],
           },
           {
@@ -72,21 +96,32 @@ export default defineConfig({
             items: [
               { text: 'Histogram', link: '/examples/histogram' },
               { text: 'Boxplot', link: '/examples/boxplot' },
+              { text: 'Violin', link: '/examples/violin' },
+              { text: 'Parallel coordinates', link: '/examples/parallel' },
             ],
           },
           {
-            text: 'Financial',
+            text: 'Financial & targets',
             items: [
               { text: 'Candlestick & OHLC', link: '/examples/candlestick' },
               { text: 'Waterfall', link: '/examples/waterfall' },
+              { text: 'Bullet', link: '/examples/bullet' },
             ],
           },
           {
-            text: 'Hierarchy & matrix',
+            text: 'Hierarchy',
             items: [
               { text: 'Treemap', link: '/examples/treemap' },
               { text: 'Sunburst', link: '/examples/sunburst' },
+              { text: 'Icicle', link: '/examples/icicle' },
+              { text: 'Circle packing', link: '/examples/circlepack' },
+            ],
+          },
+          {
+            text: 'Matrix & calendar',
+            items: [
               { text: 'Heatmap', link: '/examples/heatmap' },
+              { text: 'Calendar', link: '/examples/calendar' },
             ],
           },
           {
@@ -94,13 +129,30 @@ export default defineConfig({
             items: [
               { text: 'Radar', link: '/examples/radar' },
               { text: 'Gauge', link: '/examples/gauge' },
+              { text: 'Radial bar', link: '/examples/radialbar' },
+              { text: 'Rose', link: '/examples/rose' },
             ],
           },
           {
-            text: 'Micro & combo',
+            text: 'Flow & schedule',
+            items: [
+              { text: 'Sankey', link: '/examples/sankey' },
+              { text: 'Gantt', link: '/examples/gantt' },
+            ],
+          },
+          {
+            text: 'Geographic & graph',
+            items: [
+              { text: 'Choropleth', link: '/examples/choropleth' },
+              { text: 'Network', link: '/examples/network' },
+            ],
+          },
+          {
+            text: 'Micro, combo & text',
             items: [
               { text: 'Sparkline', link: '/examples/sparkline' },
               { text: 'Combo', link: '/examples/combo' },
+              { text: 'Word cloud', link: '/examples/wordcloud' },
             ],
           },
           {
@@ -114,7 +166,10 @@ export default defineConfig({
       },
       {
         text: 'API',
-        items: [{ text: '@chartcraft/core', link: '/api/core' }],
+        items: [
+          { text: '@chartcraft/core', link: '/api/core' },
+          { text: 'Decorator API', link: '/extensibility' },
+        ],
       },
       {
         text: 'Internal',

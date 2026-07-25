@@ -183,7 +183,14 @@ describe('radar — tooltip & keyboard', () => {
     expect(enters[0]!.clientX).toBe(-1); // keyboard-originated
     const region = el.querySelector('.chartcraft-announcer') as HTMLElement;
     expect(region.textContent).toContain('B');
-    expect(region.textContent).toContain('point 2 of 4');
+    // ADAPTED (quality audit): asserted the PIPELINE DEFAULT wording ("point i
+    // of n"), which for radar named nothing — the default reads `x`, the point
+    // INDEX for a plain numeric radar series, so an unnamed spoke announced
+    // "0: 3". Radar now supplies its own `announce` naming the SPOKE (the same
+    // name the axis label and the data table use) and counting spokes, not
+    // "points". The position and count assertions are unchanged in substance.
+    expect(region.textContent).toContain('Power');
+    expect(region.textContent).toContain('spoke 2 of 4');
     expect(canvasOf(el).tabIndex).toBe(0);
   });
 });

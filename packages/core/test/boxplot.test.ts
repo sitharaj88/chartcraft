@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { PointEvent } from '../src/index';
 import { registerStatisticalChartTypes } from '../src/charts/statistical';
 import { quantileR7, summarizeBox } from '../src/charts/statistical/stats';
-import { boxSummaryOf } from '../src/charts/statistical/boxplot';
+import { boxSummaryOf, boxplotValueDomain } from '../src/charts/statistical/boxplot';
 import { cleanupDom, ctxOf, key, mount, paintedText } from './helpers';
 
 registerStatisticalChartTypes();
@@ -75,10 +75,16 @@ describe('boxplot — rendering', () => {
   });
 
   it('the y domain covers whiskers AND outliers', () => {
+    // The domain comes from the pipeline's `extendValueDomain` stage, so it is
+    // NOT written into the caller's `yAxis` any more — `getOptions()` reports
+    // configuration, never a computed domain.
     const { chart } = mount({ type: 'boxplot', data });
-    const o = chart.getOptions();
-    expect(o.yAxis!.min).toBeLessThanOrEqual(1);
-    expect(o.yAxis!.max).toBeGreaterThanOrEqual(100);
+    expect(chart.getOptions().yAxis!.min).toBeUndefined();
+    expect(chart.getOptions().yAxis!.max).toBeUndefined();
+    const domain = boxplotValueDomain(data);
+    expect(domain![0]).toBeLessThanOrEqual(1);
+    expect(domain![1]).toBeGreaterThanOrEqual(100);
+    expect(boxplotValueDomain({ series: [] })).toBeNull();
   });
 });
 

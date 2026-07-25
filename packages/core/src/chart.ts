@@ -19,6 +19,7 @@ import type {
   PointEvent,
   Theme,
   TooltipPoint,
+  ZoomRange,
 } from './types';
 import { Emitter } from './events';
 import {
@@ -45,11 +46,36 @@ import {
 } from './layout';
 import { drawGrid } from './components/grid';
 import { drawAxes } from './components/axis';
-import { Legend } from './components/legend';
+import { Legend, type LegendItem } from './components/legend';
 import { Tooltip, defaultTooltipHTML } from './components/tooltip';
-import { getChartType, type ChartTypeDefinition, type GeomContext } from './charts/registry';
+import {
+  categoryAxisOf,
+  getChartType,
+  hasAxisChrome,
+  resolveAxisChrome,
+  valueAxisOf,
+  axisArrangement,
+  type AxisArrangement,
+  type ChartTypeDefinition,
+  type GeomContext,
+  type ResolvedAxisChrome,
+} from './charts/registry';
 import { START_ANGLE } from './charts/pie';
-import { Announcer, buildDataTable, generateAriaLabel, visuallyHide } from './a11y';
+import {
+  applyDecoratorTables,
+  applyDecoratorTooltipPoints,
+  decoratorApplies,
+  decoratorDescriptions,
+  decorators,
+  normalizeViewport,
+  type DecorationLayer,
+  type DecoratorContext,
+  type DecoratorHost,
+  type Viewport,
+} from './decorate';
+import { a11yTableToCSV, a11yTableToJSON, canvasToBlob } from './export';
+import { registerBuiltinDecorators } from './features';
+import { A11Y_TABLE_MAX_ROWS, Announcer, buildDataTable, generateAriaLabel, visuallyHide } from './a11y';
 import { navigate, type NavPosition } from './a11y/keyboard';
 import { Animator, lerp, prefersReducedMotion } from './animation';
 import { caf, deepMerge, formatValue, raf, uid } from './util';
@@ -71,6 +97,11 @@ export function createChart(container: HTMLElement, options: ChartOptions): Char
   if (!options.data || !Array.isArray(options.data.series)) {
     throw new Error('@chartcraft/core: options.data.series is required');
   }
+  // Built-in decorators (error bars, trendlines, data labels, annotations,
+  // zoom) register lazily and idempotently here, for the same reason chart
+  // types do: `sideEffects: false` means correctness must never depend on a
+  // side-effect import surviving tree-shaking.
+  registerBuiltinDecorators();
   return new ChartImpl(container, options);
 }
 
@@ -97,6 +128,21 @@ class ChartImpl implements Chart {
   private tableWrap: HTMLElement;
   private descEl: HTMLElement | null = null;
   private descId: string;
+
+  /** v0.3 zoom viewport: continuous domain overrides, or null when unzoomed. */
+  private viewport: Viewport | null = null;
+  /** Cached FULL-fidelity model for the a11y table + exportData (see a11yModel). */
+  private a11yModelCache: DataModel | null = null;
+  /** Cached table spec built from it (see a11yTableSpec). */
+  private tableSpecCache: ReturnType<ChartTypeDefinition['a11yTable']> | null = null;
+  /** The DOM table needs rebuilding (data/visibility/table-mode changed). */
+  private tableDirty = true;
+  /** `a11y.table` mode the mounted DOM table was built for. */
+  private tableMode: 'hidden' | 'visible' | 'off' | null = null;
+  /** Teardowns returned by `Decorator.attach` (run on destroy). */
+  private decoratorTeardowns: (() => void)[] = [];
+  /** Stable per-instance `DecoratorHost` (decorators key state on its identity). */
+  private hostRef: DecoratorHost | null = null;
 
   private ro: ResizeObserver | null = null;
   private unwatchScheme: () => void = () => {};
@@ -174,8 +220,9 @@ class ChartImpl implements Chart {
 
     this.watchThemeIfAuto();
 
-    this.model = buildModel(this.opts, this.paletteSlots);
+    this.model = buildModel(this.opts, this.paletteSlots, this.viewport);
     this.refresh('init', false);
+    this.attachDecorators();
   }
 
   /** The chart-type definition for the current resolved type. */
@@ -183,10 +230,17 @@ class ChartImpl implements Chart {
     return getChartType(this.opts.type);
   }
 
-  /** Whether the pipeline draws grid + axes for the current type. */
-  private get axisChrome(): boolean {
-    const needs = this.def.needs;
-    return needs.cartesianAxes && (needs.axisChrome ?? true);
+  /**
+   * Per-axis chrome for the current type (v0.3). Each switch covers that screen
+   * axis's line, tick labels, title, gridlines and reserved margin.
+   */
+  private get axisChrome(): ResolvedAxisChrome {
+    return resolveAxisChrome(this.def.needs);
+  }
+
+  /** Which screen axis carries the value axis / the band axis (v0.3). */
+  private get arrangement(): AxisArrangement {
+    return axisArrangement(this.def.needs, this.model?.horizontal ?? this.opts.horizontal);
   }
 
   private geomContext(): GeomContext {
@@ -201,16 +255,47 @@ class ChartImpl implements Chart {
 
   // -------------------------------------------------------------- public API
 
+  /**
+   * ALL-OR-NOTHING. Every stage that can reject the caller's payload runs
+   * against LOCALS first; the retained state is replaced only once they all
+   * succeeded.
+   *
+   * This matters because rejecting bad data is a documented feature of half the
+   * v0.3 types — pyramid demands exactly two series, sankey demands a
+   * `{ nodes, links }` graph, gantt demands `{ x, start, end }` objects,
+   * radar/rose/radialbar reject negatives, sankey rejects cycles. Those throws
+   * come out of `resolveOptions`, `buildModel` or the type's `layout` stage. If
+   * `this.raw` had already been overwritten when one fired, EVERY later call
+   * would re-resolve the poisoned options and throw again: a single rejected
+   * `update()` would brick the chart for the rest of its life, including its
+   * `destroy()`. Committing last means a rejected update leaves the chart
+   * exactly as it was — the throw is the whole of the damage.
+   */
   update(partial: Partial<ChartOptions>): void {
     if (this.destroyed) return;
-    this.raw = deepMerge(this.raw, partial);
-    this.opts = resolveOptions(this.raw);
-    this.theme = resolveTheme(this.opts.theme);
-    if ('theme' in partial) this.watchThemeIfAuto();
+    const nextRaw = deepMerge(this.raw, partial);
+    const nextOpts = resolveOptions(nextRaw);
+    const nextTheme = resolveTheme(nextOpts.theme);
+
+    // New data (or a new type) invalidates a zoom window expressed in the old
+    // data's units, so the viewport resets — every other update keeps it.
+    const nextViewport = 'data' in partial || 'type' in partial ? null : this.viewport;
 
     const modelKeys: (keyof ChartOptions)[] = ['data', 'type', 'stacked', 'horizontal', 'downsample', 'xAxis', 'yAxis'];
     const modelDirty = modelKeys.some((k) => k in partial);
-    this.refresh('update', modelDirty);
+    const nextModel = modelDirty ? buildModel(nextOpts, this.paletteSlots, nextViewport) : this.model;
+    // Trial the layout too: a type's `layout` stage is the third place a payload
+    // can be rejected, and it is the one that runs LAST.
+    const trial = this.buildLayout(nextOpts, nextTheme, nextModel);
+
+    // ---- commit (nothing below throws) ----
+    this.raw = nextRaw;
+    this.opts = nextOpts;
+    this.theme = nextTheme;
+    this.viewport = nextViewport;
+    this.invalidateA11y();
+    if ('theme' in partial) this.watchThemeIfAuto();
+    this.refresh('update', modelDirty, true, { model: nextModel, ...trial });
   }
 
   setData(data: ChartData): void {
@@ -225,6 +310,14 @@ class ChartImpl implements Chart {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    for (const off of this.decoratorTeardowns) {
+      try {
+        off();
+      } catch {
+        // A misbehaving decorator must never block teardown.
+      }
+    }
+    this.decoratorTeardowns = [];
     this.animator.cancel();
     if (this.resizeRaf !== null) caf(this.resizeRaf);
     if (this.hoverRaf !== null) caf(this.hoverRaf);
@@ -257,6 +350,297 @@ class ChartImpl implements Chart {
     return Object.freeze({ ...this.opts }) as Readonly<ChartOptions>;
   }
 
+  // ------------------------------------------------------------ v0.3 exports
+
+  /**
+   * Exactly the accessible data table's contents, as CSV (default) or JSON.
+   * The rows come from the type definition's `a11yTable` stage — the single
+   * source of truth for "what this chart's data looks like as a table".
+   */
+  exportData(opts?: { format?: 'csv' | 'json' }): string {
+    const spec = this.a11yTableSpec();
+    return (opts?.format ?? 'csv') === 'json' ? a11yTableToJSON(spec) : a11yTableToCSV(spec);
+  }
+
+  /**
+   * The single a11y-table spec: the type definition's stage, then every
+   * applying decorator's `a11yTable` transform (error bars append their `±`
+   * columns here). BOTH the table DOM and `exportData()` read this, so the
+   * contract's "exportData emits exactly the a11y table's contents" holds even
+   * when a cross-cutting feature contributes columns.
+   *
+   * Built from `a11yModel()` — the FULL data — never from the render model.
+   */
+  private a11yTableSpec(): ReturnType<ChartTypeDefinition['a11yTable']> {
+    if (this.tableSpecCache) return this.tableSpecCache;
+    const model = this.a11yModel();
+    const spec = this.def.a11yTable({ opts: this.opts, theme: this.theme, model, layout: this.layoutState });
+    // Cached with the same lifetime as the a11y model. Building it is O(rows)
+    // with a string allocation per cell, and three separate consumers ask for it
+    // on a single `syncDom` (the DOM table, the description's row count, and any
+    // `exportData()` the caller makes) — so it is built once per data change,
+    // not once per consumer per frame.
+    this.tableSpecCache = applyDecoratorTables(spec, {
+      ...this.decoratorContext(this.renderer, this.geom),
+      model,
+    });
+    return this.tableSpecCache;
+  }
+
+  /**
+   * The model the ACCESSIBLE surfaces read: every datum the caller supplied,
+   * with no downsampling and no zoom window.
+   *
+   * The render model is a lossy view on purpose — LTTB picks the points that
+   * best preserve a line's visible SHAPE, and a zoom viewport narrows to what is
+   * on screen. Neither is a defensible basis for the data table or
+   * `exportData()`:
+   *
+   * - LTTB has no notion of which rows are SEMANTICALLY important. Feeding its
+   *   output to a screen reader hands that user a visual approximation of the
+   *   data — 5,000 of 60,000 rows — with no way to tell that anything was
+   *   dropped, while a sighted user can zoom in and recover every point. That is
+   *   an accessibility defect, not a performance trade-off.
+   * - `exportData()` handing back 5,000 of 60,000 rows is a data-integrity
+   *   problem. An export that silently truncates is worse than one that refuses.
+   *
+   * So both read the full model. When it differs from what is drawn, the
+   * accessible DESCRIPTION says so (`samplingNote`) — the relationship is
+   * stated, never silent.
+   *
+   * Cached, because it is only invalidated by a data/type/visibility change: a
+   * resize, a theme switch, a hover and a zoom all reuse it.
+   */
+  private a11yModel(): DataModel {
+    if (this.a11yModelCache) return this.a11yModelCache;
+    // When nothing was dropped, the render model already IS the full model —
+    // no second ingest pass, so the common (small-data) case pays nothing.
+    this.a11yModelCache = this.renderModelIsLossy()
+      ? buildModel(
+          { ...this.opts, downsample: { ...this.opts.downsample, enabled: false } },
+          new Map(this.paletteSlots),
+          null,
+        )
+      : this.model;
+    return this.a11yModelCache;
+  }
+
+  /** True when the render model drops data the caller supplied. */
+  private renderModelIsLossy(): boolean {
+    if (this.viewport !== null) return true;
+    if (!this.def.needs.downsample || !this.opts.downsample.enabled) return false;
+    const raw = this.opts.data.series;
+    return this.model.series.some((s, i) => {
+      const src = raw[i]?.data;
+      return Array.isArray(src) && src.length > s.points.length;
+    });
+  }
+
+  /** Drop the cached a11y model + table DOM (data, type or visibility changed). */
+  private invalidateA11y(): void {
+    this.a11yModelCache = null;
+    this.tableSpecCache = null;
+    this.tableDirty = true;
+  }
+
+  /**
+   * One sentence stating how the drawn marks relate to the tabulated data, when
+   * they differ. Concatenated into the same `aria-describedby` node as
+   * `a11y.description` and the type's own prose.
+   */
+  private samplingNote(): string | null {
+    const parts: string[] = [];
+    const full = this.a11yModel();
+    const count = (m: DataModel): number => m.series.reduce((n, s) => n + s.points.length, 0);
+    const total = count(full);
+
+    if (full !== this.model) {
+      const shown = count(this.model);
+      if (total > shown) {
+        const where = this.viewport !== null ? 'the zoomed window' : 'the full series';
+        parts.push(
+          `The plot draws ${shown.toLocaleString()} of ${total.toLocaleString()} data points ` +
+            `(a visual sample of ${where}); the data table lists the full data.`,
+        );
+      }
+    }
+
+    // And whether the TABLE itself is bounded. Stated, never silent.
+    if (this.opts.a11y.table !== 'off') {
+      const rows = this.a11yTableSpec().rows.length;
+      if (rows > A11Y_TABLE_MAX_ROWS) {
+        parts.push(
+          `The data table lists the first ${A11Y_TABLE_MAX_ROWS.toLocaleString()} of ` +
+            `${rows.toLocaleString()} rows; exportData() returns all ${rows.toLocaleString()}.`,
+        );
+      }
+    }
+    return parts.length > 0 ? parts.join(' ') : null;
+  }
+
+  /**
+   * Re-render offscreen at `scale` (default 2) and resolve a Blob.
+   * `'svg'` rejects: this build has no SVG renderer.
+   */
+  async exportImage(opts?: { format?: 'png' | 'svg'; scale?: number; background?: string }): Promise<Blob> {
+    if (this.destroyed) {
+      throw new Error('@chartcraft/core: exportImage called on a destroyed chart');
+    }
+    const format = opts?.format ?? 'png';
+    if (format !== 'png') {
+      throw new Error(
+        `@chartcraft/core: SVG renderer not available — exportImage({ format: '${format}' }) cannot be ` +
+          `satisfied by this build (canvas renderer only). Use { format: 'png' }.`,
+      );
+    }
+    const scale = Math.max(0.1, Math.min(8, opts?.scale ?? 2));
+    const background = opts?.background ?? this.theme.surface;
+    const L = this.layoutState;
+    const doc = this.root.ownerDocument;
+    const canvas = doc.createElement('canvas');
+    const renderer = new CanvasRenderer(canvas);
+    try {
+      renderer.resize(L.width, L.height, scale);
+      // Paint the CURRENT frame (target geometry, not a mid-animation one).
+      this.paint(renderer, this.geom.pos, this.geom.slices, background);
+    } finally {
+      renderer.destroy();
+    }
+    return canvasToBlob(canvas, 'image/png');
+  }
+
+  /**
+   * Programmatic zoom: sets the viewport (continuous axes only), re-runs
+   * downsampling against the visible window, re-lays out, repaints and emits
+   * the `zoom` event. `null` resets.
+   */
+  zoomTo(range: ZoomRange): void {
+    if (this.destroyed) return;
+    const vp = normalizeViewport(range);
+    this.applyViewport(vp);
+    this.emitter.emit('zoom', vp === null ? null : { ...(vp.x ? { x: vp.x } : {}), ...(vp.y ? { y: vp.y } : {}) });
+  }
+
+  // --------------------------------------------------------- viewport (zoom)
+
+  /**
+   * Apply a viewport and re-run model -> layout -> paint. Emits `render`, but
+   * NOT `zoom` (public `zoomTo` owns the event so decorators can batch).
+   */
+  private applyViewport(v: Viewport | null): void {
+    if (this.destroyed) return;
+    this.viewport = normalizeViewport(v);
+    this.model = buildModel(this.opts, this.paletteSlots, this.viewport);
+    this.invalidateA11y();
+    this.hover = null;
+    this.focus = null;
+    this.tooltip.hide();
+    this.animator.cancel();
+    this.computeLayout();
+    this.syncDom();
+    this.drawFrame(this.geom.pos, this.geom.slices);
+    this.emitter.emit('render', { reason: 'update' });
+  }
+
+  // -------------------------------------------------------------- decorators
+
+  /**
+   * Context handed to every pipeline-level decorator pass.
+   *
+   * `host` is the live DOM host — or **null** when the pass is painting through
+   * a renderer that is not the mounted canvas, which is what keeps
+   * `exportImage()` isolated: an offscreen export cannot reach the live DOM.
+   */
+  private decoratorContext(r: Renderer, geom: TypeGeom, host?: DecoratorHost | null): DecoratorContext {
+    const L = this.layoutState;
+    return {
+      r,
+      theme: this.theme,
+      opts: this.opts,
+      model: this.model,
+      layout: L,
+      plot: L.plot,
+      xScale: L.xScale,
+      yScale: L.yScale,
+      geom,
+      hover: this.hover,
+      def: this.def,
+      viewport: this.viewport,
+      host: host !== undefined ? host : r === this.renderer ? this.decoratorHost() : null,
+      emit: (type, ev) => this.emitter.emit(type, ev),
+    };
+  }
+
+  /**
+   * The chart's decorator host. Created once and reused: decorators key their
+   * per-instance state on this object identity (the zoom decorator's gesture
+   * state), so it must be stable for the chart's whole lifetime.
+   */
+  private decoratorHost(): DecoratorHost {
+    if (this.hostRef) return this.hostRef;
+    this.hostRef = {
+      canvas: this.canvas,
+      root: this.root,
+      el: this.el,
+      context: () => this.decoratorContext(this.renderer, this.geom),
+      requestRender: () => this.scheduleHoverDraw(),
+      setViewport: (v) => this.applyViewport(v),
+      getViewport: () => this.viewport,
+      emit: (type, ev) => this.emitter.emit(type, ev),
+    };
+    return this.hostRef;
+  }
+
+  /** One-time per-instance decorator lifecycle (listeners live here only). */
+  private attachDecorators(): void {
+    const host = this.decoratorHost();
+    for (const d of decorators()) {
+      if (!d.attach) continue;
+      const off = d.attach(host);
+      if (typeof off === 'function') this.decoratorTeardowns.push(off);
+    }
+  }
+
+  /** Extra legend entries contributed by decorators (in decorator order). */
+  private decoratorLegendItems(): LegendItem[] {
+    const list = decorators().filter((d) => d.legendItems);
+    if (list.length === 0) return [];
+    const dctx = this.decoratorContext(this.renderer, this.geom);
+    const out: LegendItem[] = [];
+    for (const d of list) {
+      if (!decoratorApplies(d, dctx)) continue;
+      out.push(...(d.legendItems?.(dctx) ?? []));
+    }
+    return out;
+  }
+
+  /**
+   * Give decorators first refusal on a click (annotations claim their own hit
+   * targets). Topmost-drawn wins, so the list is walked in reverse.
+   */
+  private decoratorClick(px: number, py: number, native: MouseEvent): boolean {
+    const list = decorators().filter((d) => d.onClick);
+    if (list.length === 0) return false;
+    const dctx = this.decoratorContext(this.renderer, this.geom);
+    for (let i = list.length - 1; i >= 0; i--) {
+      const d = list[i];
+      if (!d || !decoratorApplies(d, dctx)) continue;
+      if (d.onClick?.(dctx, px, py, native) === true) return true;
+    }
+    return false;
+  }
+
+  /** Draw one decoration layer (definition stage first, then the list). */
+  private runDecorations(layer: DecorationLayer, ctx: RenderContext, host: DecoratorHost | null): void {
+    this.def.decorations?.(ctx, layer);
+    const list = decorators(layer);
+    if (list.length === 0) return;
+    const dctx = this.decoratorContext(ctx.r, ctx.geom, host);
+    for (const d of list) {
+      if (decoratorApplies(d, dctx)) d.draw(dctx);
+    }
+  }
+
   // ------------------------------------------------------------ theme watch
 
   private watchThemeIfAuto(): void {
@@ -274,8 +658,18 @@ class ChartImpl implements Chart {
 
   // ---------------------------------------------------------------- pipeline
 
-  /** Re-run pipeline stages and paint. */
-  private refresh(reason: RenderReason, modelDirty: boolean, animate = true): void {
+  /**
+   * Re-run pipeline stages and paint.
+   *
+   * `prebuilt` carries a model + layout that `update()` already computed (and
+   * therefore already proved does not throw) so the trial run is not repeated.
+   */
+  private refresh(
+    reason: RenderReason,
+    modelDirty: boolean,
+    animate = true,
+    prebuilt?: { model: DataModel; layout: Layout; geom: TypeGeom; legendShow: boolean | null },
+  ): void {
     if (this.destroyed) return;
     // Retain previous screen-space model for animation.
     const prevPosById = new Map<string, (PointPos | null)[]>();
@@ -289,12 +683,13 @@ class ChartImpl implements Chart {
     const hadPrev = this.lastSize !== null;
 
     if (modelDirty || !this.model) {
-      this.model = buildModel(this.opts, this.paletteSlots);
+      this.model = prebuilt ? prebuilt.model : buildModel(this.opts, this.paletteSlots, this.viewport);
+      this.invalidateA11y();
       this.focus = null;
       this.hover = null;
       this.tooltip.hide();
     }
-    this.computeLayout();
+    this.computeLayout(prebuilt);
     this.syncDom();
 
     const anim = this.opts.animation;
@@ -362,46 +757,67 @@ class ChartImpl implements Chart {
 
   // ------------------------------------------------------------------ layout
 
-  private measuredSize(): { width: number; height: number } {
-    const width = this.opts.width ?? (this.wrap.clientWidth || this.el.clientWidth || 640);
-    const height = this.opts.height ?? (this.wrap.clientHeight || this.el.clientHeight || 400);
+  private measuredSize(opts: ResolvedOptions = this.opts): { width: number; height: number } {
+    const width = opts.width ?? (this.wrap.clientWidth || this.el.clientWidth || 640);
+    const height = opts.height ?? (this.wrap.clientHeight || this.el.clientHeight || 400);
     return { width: Math.max(40, width), height: Math.max(40, height) };
   }
 
-  private topExtra(): number {
-    const t = this.theme;
+  private topExtra(opts: ResolvedOptions = this.opts, t: Theme = this.theme): number {
     let extra = 0;
-    if (this.opts.title) extra += t.fontSize + 6 + 6;
-    if (this.opts.subtitle) extra += t.fontSize + 4;
+    if (opts.title) extra += t.fontSize + 6 + 6;
+    if (opts.subtitle) extra += t.fontSize + 4;
     if (extra > 0) extra += 6;
     return extra;
   }
 
-  private computeLayout(): void {
-    const { width, height } = this.measuredSize();
-    const topExtra = this.topExtra();
+  /**
+   * Run the layout stages against EXPLICIT options/theme/model and return the
+   * result without touching retained state. Extracted from `computeLayout` so
+   * `update()` can trial a payload (a type's `layout` stage may reject it) and
+   * commit only on success — see `update`.
+   */
+  private buildLayout(
+    opts: ResolvedOptions,
+    theme: Theme,
+    model: DataModel,
+  ): { layout: Layout; geom: TypeGeom; legendShow: boolean | null } {
+    const def = getChartType(opts.type);
+    const { width, height } = this.measuredSize(opts);
+    const topExtra = this.topExtra(opts, theme);
     const measure = (text: string, font: string): number => this.renderer.measure(text, font);
+    const chrome = resolveAxisChrome(def.needs);
+    const arrangement = axisArrangement(def.needs, model.horizontal ?? opts.horizontal);
 
-    this.layoutState = this.def.needs.cartesianAxes
+    const layout = def.needs.cartesianAxes
       ? computeCartesianLayout({
           width,
           height,
           topExtra,
-          opts: this.opts,
-          model: this.model,
-          theme: this.theme,
+          opts,
+          model,
+          theme,
           measure,
-          axisChrome: this.axisChrome,
+          axisChrome: chrome,
+          arrangement,
+          viewport: model.viewport,
         })
-      : computePlainLayout({ width, height, topExtra, padding: this.opts.padding });
+      : computePlainLayout({ width, height, topExtra, padding: opts.padding, viewport: model.viewport });
 
-    this.geom = this.def.layout({
-      opts: this.opts,
-      theme: this.theme,
-      model: this.model,
-      layout: this.layoutState,
-      measure,
-    });
+    const geom = def.layout({ opts, theme, model, layout, measure });
+
+    // v0.3 `resolveLegend` stage: a legend decision that needs MEASURED layout
+    // (slope's direct end labels). It runs strictly between `layout()` and
+    // `syncDom()`, so `layout()` never has to mutate the resolved options.
+    const show = def.resolveLegend?.({ opts, theme, model, layout, geom });
+    return { layout, geom, legendShow: typeof show === 'boolean' ? show : null };
+  }
+
+  private computeLayout(prebuilt?: { layout: Layout; geom: TypeGeom; legendShow: boolean | null }): void {
+    const built = prebuilt ?? this.buildLayout(this.opts, this.theme, this.model);
+    this.layoutState = built.layout;
+    this.geom = built.geom;
+    if (built.legendShow !== null) this.opts.legend.show = built.legendShow;
   }
 
   // -------------------------------------------------------------------- DOM
@@ -424,7 +840,9 @@ class ChartImpl implements Chart {
       this.legend.update([], t, o.legend);
       if (o.legend.show) this.legend.el.appendChild(legendCustom);
     } else {
-      this.legend.update(this.def.legendItems(this.geomContext()), t, o.legend);
+      // Decorators may append entries (a trendline is legend-labeled so it can
+      // never be mistaken for observed data) — always AFTER the type's items.
+      this.legend.update([...this.def.legendItems(this.geomContext()), ...this.decoratorLegendItems()], t, o.legend);
     }
     if (o.legend.position === 'top') {
       if (this.root.firstChild !== this.legend.el) this.root.insertBefore(this.legend.el, this.wrap);
@@ -435,7 +853,7 @@ class ChartImpl implements Chart {
 
     // Canvas aria.
     this.canvas.setAttribute('role', 'img');
-    this.canvas.setAttribute('aria-label', generateAriaLabel(o, m));
+    this.canvas.setAttribute('aria-label', this.ariaLabel());
     if (o.a11y.keyboard) {
       this.canvas.tabIndex = 0;
       this.canvas.style.outline = 'none';
@@ -443,15 +861,18 @@ class ChartImpl implements Chart {
       this.canvas.removeAttribute('tabindex');
     }
 
-    // Description.
-    if (o.a11y.description) {
+    // Description: the caller's text, the type's own `a11yDescription` stage
+    // and every decorator's, in that order, in ONE node. Features never add a
+    // second hidden node or a second aria-describedby token.
+    const description = this.describe();
+    if (description) {
       if (!this.descEl) {
         this.descEl = doc.createElement('div');
         this.descEl.id = this.descId;
         visuallyHide(this.descEl);
         this.root.appendChild(this.descEl);
       }
-      this.descEl.textContent = o.a11y.description;
+      this.descEl.textContent = description;
       this.canvas.setAttribute('aria-describedby', this.descId);
     } else if (this.descEl) {
       this.descEl.remove();
@@ -460,38 +881,123 @@ class ChartImpl implements Chart {
     }
 
     // Data table fallback (content supplied by the type definition).
-    this.tableWrap.textContent = '';
-    if (o.a11y.table !== 'off') {
-      const spec = this.def.a11yTable(this.geomContext());
-      const table = buildDataTable(doc, o.title ?? generateAriaLabel(o, m), spec);
-      if (o.a11y.table === 'hidden') {
-        visuallyHide(this.tableWrap);
+    //
+    // Rebuilt only when the DATA behind it changed, never merely because a frame
+    // was painted. `syncDom` runs on every resize, theme switch and legend
+    // toggle; re-materializing one `<tr>` per datum each time made a large
+    // series' redraw cost scale with its row count — and the table now carries
+    // the FULL series, so that cost is no longer bounded by the downsample
+    // threshold. The mode is tracked too, since 'hidden' -> 'visible' restyles
+    // the same content.
+    if (this.tableDirty || this.tableMode !== o.a11y.table) {
+      this.tableWrap.textContent = '';
+      if (o.a11y.table !== 'off') {
+        const table = buildDataTable(doc, o.title ?? this.ariaLabel(), this.a11yTableSpec());
+        if (o.a11y.table === 'hidden') {
+          visuallyHide(this.tableWrap);
+        } else {
+          this.tableWrap.removeAttribute('style');
+          table.style.font = `${t.fontSize}px ${t.fontFamily}`;
+          table.style.color = t.textPrimary;
+          table.style.borderCollapse = 'collapse';
+        }
+        this.tableWrap.appendChild(table);
       } else {
-        this.tableWrap.removeAttribute('style');
+        visuallyHide(this.tableWrap);
+      }
+      this.tableDirty = false;
+      this.tableMode = o.a11y.table;
+    } else if (o.a11y.table === 'visible') {
+      // Content unchanged, but the theme may have. Restyle in place.
+      const table = this.tableWrap.querySelector('table');
+      if (table instanceof HTMLTableElement) {
         table.style.font = `${t.fontSize}px ${t.fontFamily}`;
         table.style.color = t.textPrimary;
-        table.style.borderCollapse = 'collapse';
       }
-      this.tableWrap.appendChild(table);
-    } else {
-      visuallyHide(this.tableWrap);
     }
 
     this.tooltip.applyTheme(t);
   }
 
+  /**
+   * The chart's accessible NAME.
+   *
+   * The generic summary needs facts only the pipeline can gather: how many marks
+   * this type's own keyboard geometry actually reaches (NOT `model.maxLen`,
+   * which is wrong for every type whose marks are not one-per-point), and the
+   * value range formatted with the axis formatter the caller configured. A type
+   * with a better noun for its marks overrides the whole clause through its
+   * `a11ySummary` stage.
+   */
+  private ariaLabel(): string {
+    const m = this.model;
+    const nav = this.def.keyboardNav(m);
+    let marks = 0;
+    for (let si = 0; si < nav.seriesCount; si++) {
+      if (nav.isVisible(si)) marks += nav.pointCount(si);
+    }
+    // `'rows'` declares "this type has NO value axis" (gantt: task rows against
+    // a time axis). Its `model.yDomain` holds whatever the generic extent pass
+    // scraped — for gantt, epoch milliseconds, which the label announced as
+    // "values from 1767.23B to 1768.18B". No value axis, no range clause.
+    const hasValueAxis = this.arrangement !== 'rows';
+    return generateAriaLabel(this.opts, m, {
+      marks,
+      valueRange: hasValueAxis ? m.yDomain : null,
+      typeSummary: this.def.a11ySummary?.(this.geomContext()) ?? null,
+      formatValue: (v) => this.formatYValue(v),
+    });
+  }
+
+  /**
+   * The chart's full accessible description: `a11y.description`, then the type
+   * definition's `a11yDescription` stage, then every applying decorator's.
+   * Empty string when nobody has anything to say.
+   */
+  private describe(): string {
+    const parts: string[] = [];
+    if (this.opts.a11y.description) parts.push(this.opts.a11y.description);
+    const own = this.def.a11yDescription?.(this.geomContext());
+    if (own) parts.push(own);
+    // How the drawn marks relate to the tabulated data, when they differ.
+    const sampling = this.samplingNote();
+    if (sampling) parts.push(sampling);
+    parts.push(...decoratorDescriptions(this.decoratorContext(this.renderer, this.geom)));
+    return parts.join(' ');
+  }
+
   // ------------------------------------------------------------------- paint
 
   private drawFrame(pos: (PointPos | null)[][], slices: PieSlice[] | null): void {
-    const t = this.theme;
     const L = this.layoutState;
     const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
     if (!this.lastSize || this.lastSize.w !== L.width || this.lastSize.h !== L.height || this.lastSize.dpr !== dpr) {
       this.renderer.resize(L.width, L.height, dpr);
       this.lastSize = { w: L.width, h: L.height, dpr };
     }
-    const r = this.renderer;
-    r.clear(t.surface);
+    this.paint(this.renderer, pos, slices);
+  }
+
+  /**
+   * Paint one full frame through an arbitrary renderer (the live canvas, or an
+   * offscreen one for `exportImage`). Stage order — the ONE place overlay
+   * ordering is defined:
+   *
+   *   surface -> title/subtitle -> grid -> 'under' decorations -> marks
+   *   -> axis chrome -> 'over' decorations
+   *
+   * Within each decoration layer the type's own `decorations(ctx, layer)` runs
+   * first, then the registered `Decorator`s in `order` (ascending).
+   */
+  private paint(
+    r: Renderer,
+    pos: (PointPos | null)[][],
+    slices: PieSlice[] | null,
+    background?: string,
+  ): void {
+    const t = this.theme;
+    const L = this.layoutState;
+    r.clear(background ?? t.surface);
 
     // Title / subtitle in ink colors.
     const o = this.opts;
@@ -522,9 +1028,15 @@ class ChartImpl implements Chart {
       hover: this.hover,
     };
 
-    if (this.axisChrome) drawGrid(r, L, t, o);
+    // Per-axis chrome: an axis whose switch is off draws no line, no tick
+    // labels, no title and no gridlines.
+    const chrome = this.axisChrome;
+    const host = r === this.renderer ? this.decoratorHost() : null;
+    if (hasAxisChrome(chrome)) drawGrid(r, L, t, o, chrome);
+    this.runDecorations('under', ctx, host);
     this.def.render(ctx);
-    if (this.axisChrome) drawAxes(r, L, t, o);
+    if (hasAxisChrome(chrome)) drawAxes(r, L, t, o, chrome);
+    this.runDecorations('over', ctx, host);
   }
 
   private scheduleHoverDraw(): void {
@@ -613,6 +1125,8 @@ class ChartImpl implements Chart {
   private handleClick(e: MouseEvent): void {
     if (this.destroyed) return;
     const { px, py } = this.canvasPoint(e);
+    // Decorators (annotations) claim clicks before datum hit-testing.
+    if (this.decoratorClick(px, py, e)) return;
     const hit = this.hitTest(px, py);
     if (hit) {
       const ev = this.pointEventFor(hit.si, hit.pi, e.clientX, e.clientY, e);
@@ -691,9 +1205,16 @@ class ChartImpl implements Chart {
     return formatValue(x, x instanceof Date ? span : 0);
   }
 
+  /**
+   * Format a data VALUE with the axis that actually carries values for this
+   * chart type. The role assignment is the registry's (`valueAxisOf`), not a
+   * `model.horizontal` guess — a type that is neither vertical nor
+   * `horizontal: true` (a mirrored pyramid, task rows) declares `needs.axes`
+   * and gets the right formatter without post-processing its tooltip.
+   */
   private formatYValue(y: number | null): string {
     if (y === null) return '—';
-    const fmt = (this.model.horizontal ? this.opts.xAxis : this.opts.yAxis).ticks?.format;
+    const fmt = valueAxisOf(this.def.needs, this.opts, this.model.horizontal).ticks?.format;
     return fmt ? fmt(y) : formatValue(y);
   }
 
@@ -711,7 +1232,7 @@ class ChartImpl implements Chart {
     let formattedX = this.formatXValue(p.x);
     if (m.xType === 'category') {
       const cat = m.categories?.[bandIndexFor(m, p.xv, pi)];
-      if (cat !== undefined) formattedX = formatCategory(cat, m.horizontal ? this.opts.yAxis : this.opts.xAxis);
+      if (cat !== undefined) formattedX = formatCategory(cat, categoryAxisOf(this.def.needs, this.opts, m.horizontal));
     }
     if (p.color) color = p.color;
     return {
@@ -726,11 +1247,18 @@ class ChartImpl implements Chart {
   }
 
   private showTooltipFor(hit: HoverState, clientX: number, clientY: number): void {
-    const points = this.def.tooltipPoints(
+    const typePoints = this.def.tooltipPoints(
       {
         ...this.geomContext(),
         pointFor: (si, pi) => this.tooltipPointFor(si, pi),
       },
+      hit,
+    );
+    // Decorators enrich the points (error-bar intervals) BEFORE the caller's
+    // formatter sees them — no wrapping of `opts.tooltip.format`.
+    const points = applyDecoratorTooltipPoints(
+      typePoints,
+      this.decoratorContext(this.renderer, this.geom),
       hit,
     );
     if (points.length === 0) {
@@ -746,12 +1274,21 @@ class ChartImpl implements Chart {
   private toggleSeries(seriesId: string): void {
     if (this.destroyed) return;
     const rawSeries = this.raw.data?.series ?? [];
-    const target = rawSeries.find((s) => (s.id ?? s.name) === seriesId);
+    const idx = rawSeries.findIndex((s) => (s.id ?? s.name) === seriesId);
+    const target = rawSeries[idx];
     if (!target) return;
     const nowVisible = !(target.visible ?? true);
-    target.visible = nowVisible;
+    // COPY-ON-WRITE. The retained options are already the chart's own deep
+    // clone of what the caller passed (util.ts#deepClone), so writing
+    // `target.visible` would be safe — rebuilding the entry instead makes the
+    // contract's "the chart never mutates the object you pass" true by
+    // construction rather than by the clone holding.
+    const nextSeries = rawSeries.slice();
+    nextSeries[idx] = { ...target, visible: nowVisible };
+    this.raw = { ...this.raw, data: { ...(this.raw.data ?? { series: [] }), series: nextSeries } };
     this.opts = resolveOptions(this.raw);
-    this.model = buildModel(this.opts, this.paletteSlots);
+    this.model = buildModel(this.opts, this.paletteSlots, this.viewport);
+    this.invalidateA11y();
     this.hover = null;
     this.focus = null;
     this.tooltip.hide();

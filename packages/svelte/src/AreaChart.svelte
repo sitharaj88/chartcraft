@@ -1,5 +1,6 @@
 <!--
-  <AreaChart {options} on:pointclick on:pointenter on:pointleave on:legendtoggle />
+  <AreaChart {options} on:pointclick on:pointenter on:pointleave on:legendtoggle
+    on:zoom on:annotationclick />
   Same as <Chart> minus `type` (injected as 'area').
 -->
 <script>
@@ -27,4 +28,6 @@
   on:pointenter
   on:pointleave
   on:legendtoggle
+  on:zoom
+  on:annotationclick
 />

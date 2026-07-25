@@ -29,4 +29,26 @@ export { default as FunnelChart } from './FunnelChart.svelte';
 export { default as RadarChart } from './RadarChart.svelte';
 export { default as GaugeChart } from './GaugeChart.svelte';
 
+// v0.3 chart types
+export { default as RangeareaChart } from './RangeareaChart.svelte';
+export { default as BulletChart } from './BulletChart.svelte';
+export { default as DumbbellChart } from './DumbbellChart.svelte';
+export { default as LollipopChart } from './LollipopChart.svelte';
+export { default as SlopeChart } from './SlopeChart.svelte';
+export { default as StreamgraphChart } from './StreamgraphChart.svelte';
+export { default as MarimekkoChart } from './MarimekkoChart.svelte';
+export { default as PyramidChart } from './PyramidChart.svelte';
+export { default as CalendarChart } from './CalendarChart.svelte';
+export { default as RadialbarChart } from './RadialbarChart.svelte';
+export { default as RoseChart } from './RoseChart.svelte';
+export { default as ViolinChart } from './ViolinChart.svelte';
+export { default as ParallelChart } from './ParallelChart.svelte';
+export { default as IcicleChart } from './IcicleChart.svelte';
+export { default as CirclepackChart } from './CirclepackChart.svelte';
+export { default as WordcloudChart } from './WordcloudChart.svelte';
+export { default as SankeyChart } from './SankeyChart.svelte';
+export { default as GanttChart } from './GanttChart.svelte';
+export { default as ChoroplethChart } from './ChoroplethChart.svelte';
+export { default as NetworkChart } from './NetworkChart.svelte';
+
 export { EVENTS, withType } from './options.js';

@@ -9,6 +9,7 @@
  * The running-total layout math is the pure `computeWaterfallSteps`.
  */
 import type { ChartData, ChartType, DataValue, TooltipPoint, Theme } from '../../types';
+import { dataValuesOf } from '../../data/normalize';
 import type { ChartTypeDefinition } from '../registry';
 import type { ContinuousScale, HoverState, PointPos, RenderContext, TypeGeom } from '../../layout';
 import type { A11yTableSpec } from '../../a11y';
@@ -75,7 +76,7 @@ function rawEntry(d: DataValue): WaterfallEntry {
 /** Entries of the first visible series in the raw data. */
 export function rawWaterfallEntries(data: ChartData): WaterfallEntry[] {
   const s = data.series.find((x) => x.visible !== false);
-  return s ? s.data.map(rawEntry) : [];
+  return s ? dataValuesOf(s.data).map(rawEntry) : [];
 }
 
 interface WaterfallExtra {
@@ -85,25 +86,36 @@ interface WaterfallExtra {
   si: number;
 }
 
+/**
+ * Value domain covering the running-total extent, zero-anchored and `nice()`d
+ * (pure, so it is unit-testable without mounting a chart).
+ */
+export function waterfallValueDomain(data: ChartData): [number, number] {
+  const steps = computeWaterfallSteps(rawWaterfallEntries(data));
+  let lo = 0;
+  let hi = 0;
+  for (const st of steps) {
+    if (!st) continue;
+    lo = Math.min(lo, st.start, st.end);
+    hi = Math.max(hi, st.start, st.end);
+  }
+  if (lo === hi) hi = lo + 1;
+  const nice = new LinearScale([lo, hi]).nice(5).domain();
+  return [nice[0], nice[1]];
+}
+
 export const waterfallDefinition: ChartTypeDefinition = {
   id: 'waterfall' as ChartType,
   needs: { cartesianAxes: true, xScale: 'band', baseKind: 'bar', combo: false },
 
-  resolveOptions(resolved, raw) {
-    const steps = computeWaterfallSteps(rawWaterfallEntries(resolved.data));
-    let lo = 0;
-    let hi = 0;
-    for (const st of steps) {
-      if (!st) continue;
-      lo = Math.min(lo, st.start, st.end);
-      hi = Math.max(hi, st.start, st.end);
-    }
-    if (lo === hi) hi = lo + 1;
-    const nice = new LinearScale([lo, hi]).nice(5).domain();
-    const rawY = typeof raw.yAxis === 'object' && raw.yAxis !== null ? raw.yAxis : {};
-    resolved.yAxis = { ...resolved.yAxis };
-    if (typeof rawY.min !== 'number') resolved.yAxis.min = nice[0];
-    if (typeof rawY.max !== 'number') resolved.yAxis.max = nice[1];
+  /**
+   * The value axis must cover the RUNNING-TOTAL extent, always including zero:
+   * a waterfall's bars float between `start` and `end`, values the generic
+   * extent (which only sees each delta) cannot reach. Pipeline stage, so
+   * `getOptions().yAxis` keeps reporting the caller's axis options.
+   */
+  extendValueDomain(_model, opts) {
+    return waterfallValueDomain(opts.data);
   },
 
   layout(ctx): TypeGeom {

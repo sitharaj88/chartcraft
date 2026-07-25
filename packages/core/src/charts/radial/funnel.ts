@@ -208,6 +208,31 @@ export const funnelDefinition: ChartTypeDefinition = {
     };
   },
 
+  /**
+   * A funnel is read for its DROP-OFF, so the announcement carries the stage
+   * name, the value, the share of the first stage and the step-over-step
+   * conversion. The pipeline default could carry none of them: it reads `x`,
+   * which is `null` for the `{ label, y }` shape (announcing the point index),
+   * and the `% of first stage` figure — the whole point of a funnel — existed
+   * only in the data table.
+   */
+  announce(ctx, pos) {
+    const stages = computeFunnelStages(ctx.model, ctx.theme.colorScheme);
+    const idx = stages.findIndex((s) => s.pi === pos.pi);
+    const stage = stages[idx];
+    if (!stage) return null;
+    const first = stages[0]?.value ?? 0;
+    const prev = idx > 0 ? stages[idx - 1]?.value ?? 0 : 0;
+    const parts = [`${stage.label}: ${formatValue(stage.value)}`];
+    if (idx > 0 && first > 0) {
+      parts.push(`${roundFP(Math.round((stage.value / first) * 1000) / 10)}% of the first stage`);
+    }
+    if (idx > 0 && prev > 0) {
+      parts.push(`${roundFP(Math.round((stage.value / prev) * 1000) / 10)}% of the previous stage`);
+    }
+    return `${parts.join(', ')}. Stage ${idx + 1} of ${stages.length}.`;
+  },
+
   tooltipPoints(ctx, hit) {
     const tp = ctx.pointFor(hit.si, hit.pi);
     if (!tp) return [];

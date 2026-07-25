@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, reactive, type App } from 'vue';
 import { Chart, DonutChart } from '../src/index';
-import type { ChartOptions, PointEvent } from '../src/index';
+import type { Annotation, ChartOptions, PointEvent } from '../src/index';
 
 interface FakeChart {
   el: HTMLElement;
@@ -87,24 +87,42 @@ afterEach(() => {
 const options: ChartOptions = { type: 'line', data: { series: [{ name: 'One', data: [1] }] } };
 
 describe('event bridging (mocked core, Vue)', () => {
-  it('bridges all four core events to kebab-case emits', () => {
+  it('bridges all six core events to kebab-case emits', () => {
     const onPointClick = vi.fn();
     const onPointEnter = vi.fn();
     const onPointLeave = vi.fn();
     const onLegendToggle = vi.fn();
-    mount(Chart, { options, onPointClick, onPointEnter, onPointLeave, onLegendToggle });
+    const onZoom = vi.fn();
+    const onAnnotationClick = vi.fn();
+    mount(Chart, {
+      options,
+      onPointClick,
+      onPointEnter,
+      onPointLeave,
+      onLegendToggle,
+      onZoom,
+      onAnnotationClick,
+    });
     const chart = lastChart();
-    expect(chart.on).toHaveBeenCalledTimes(4);
+    expect(chart.on).toHaveBeenCalledTimes(6);
 
     chart.emit('pointclick', pointEvent);
     chart.emit('pointenter', pointEvent);
     chart.emit('pointleave', pointEvent);
     chart.emit('legendtoggle', { seriesId: 'One', visible: false });
 
+    const annotation: Annotation = { kind: 'line', axis: 'y', value: 2, label: 'Target' };
+    chart.emit('zoom', { x: [0, 5] });
+    chart.emit('zoom', null);
+    chart.emit('annotationclick', { index: 0, annotation });
+
     expect(onPointClick).toHaveBeenCalledWith(pointEvent);
     expect(onPointEnter).toHaveBeenCalledWith(pointEvent);
     expect(onPointLeave).toHaveBeenCalledWith(pointEvent);
     expect(onLegendToggle).toHaveBeenCalledWith({ seriesId: 'One', visible: false });
+    expect(onZoom).toHaveBeenNthCalledWith(1, { x: [0, 5] });
+    expect(onZoom).toHaveBeenNthCalledWith(2, null);
+    expect(onAnnotationClick).toHaveBeenCalledWith({ index: 0, annotation });
   });
 
   it('does not call update on mount; updates with the watched options object', async () => {
@@ -117,6 +135,54 @@ describe('event bridging (mocked core, Vue)', () => {
     await nextTick();
     expect(chart.update).toHaveBeenCalledTimes(1);
     expect((chart.update.mock.calls[0]![0] as ChartOptions).title).toBe('T');
+  });
+
+  it('per-type aliases forward the v0.3 events (@zoom, @annotation-click) too', () => {
+    const onZoom = vi.fn();
+    const onAnnotationClick = vi.fn();
+    mount(DonutChart, { options: { data: options.data }, onZoom, onAnnotationClick });
+    const chart = lastChart();
+    const annotation: Annotation = { kind: 'point', x: 'A', y: 1, label: 'Peak' };
+
+    chart.emit('zoom', null);
+    chart.emit('annotationclick', { index: 1, annotation });
+
+    expect(onZoom).toHaveBeenCalledWith(null);
+    expect(onAnnotationClick).toHaveBeenCalledWith({ index: 1, annotation });
+  });
+
+  it('deep-watches the v0.3 option blocks into chart.update()', async () => {
+    const live = reactive({
+      ...options,
+      dataLabels: false,
+      zoom: false,
+      sankey: { nodeWidth: 10 },
+    }) as ChartOptions;
+    mount(Chart, { options: live });
+    const chart = lastChart();
+    expect(chart.update).not.toHaveBeenCalled();
+
+    live.dataLabels = { select: 'all' };
+    await nextTick();
+    expect(chart.update).toHaveBeenCalledTimes(1);
+
+    live.zoom = { axis: 'xy' };
+    await nextTick();
+    expect(chart.update).toHaveBeenCalledTimes(2);
+
+    live.annotations = [{ kind: 'line', axis: 'y', value: 3 }];
+    await nextTick();
+    expect(chart.update).toHaveBeenCalledTimes(3);
+
+    // Nested mutation inside a per-type block is caught by the deep watch.
+    live.sankey!.nodeWidth = 24;
+    await nextTick();
+    expect(chart.update).toHaveBeenCalledTimes(4);
+    expect(chart.options).toMatchObject({
+      dataLabels: { select: 'all' },
+      zoom: { axis: 'xy' },
+      sankey: { nodeWidth: 24 },
+    });
   });
 
   it('per-type alias injects its type and forwards events; destroy on unmount', () => {

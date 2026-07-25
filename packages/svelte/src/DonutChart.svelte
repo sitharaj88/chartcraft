@@ -1,5 +1,6 @@
 <!--
-  <DonutChart {options} on:pointclick on:pointenter on:pointleave on:legendtoggle />
+  <DonutChart {options} on:pointclick on:pointenter on:pointleave on:legendtoggle
+    on:zoom on:annotationclick />
   Same as <Chart> minus `type` (injected as 'donut').
 -->
 <script>
@@ -27,4 +28,6 @@
   on:pointenter
   on:pointleave
   on:legendtoggle
+  on:zoom
+  on:annotationclick
 />

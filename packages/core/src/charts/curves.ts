@@ -97,11 +97,25 @@ function monotoneTangents(pts: readonly XY[]): number[] {
   return m;
 }
 
+/**
+ * Append every element of `src` to `dst`.
+ *
+ * NOT `dst.push(...src)`. A spread becomes an ARGUMENT LIST, and V8 caps that at
+ * roughly 125k entries — beyond it the call throws `RangeError: Maximum call
+ * stack size exceeded`. A line series carries one path command per point, so
+ * `downsample: { enabled: false }` (a documented, supported option) turned into
+ * a hard crash somewhere past ~125k points, on a library that advertises 1M.
+ * The loop has no such ceiling and is no slower in practice.
+ */
+function appendAll<T>(dst: T[], src: readonly T[]): void {
+  for (let i = 0; i < src.length; i++) dst.push(src[i] as T);
+}
+
 /** Stroke path for a (possibly gapped) series line. */
 export function linePath(pts: readonly (PointPos | null)[], curve: CurveKind): PathCmd[] {
   const cmds: PathCmd[] = [];
   for (const run of runsOf(pts)) {
-    if (run.length >= 2) cmds.push(...segmentCmds(run, curve));
+    if (run.length >= 2) appendAll(cmds, segmentCmds(run, curve));
   }
   return cmds;
 }
@@ -114,15 +128,14 @@ export function areaPath(pts: readonly (PointPos | null)[], curve: CurveKind): P
   const cmds: PathCmd[] = [];
   for (const run of runsOf(pts)) {
     if (run.length < 2) continue;
-    const top = segmentCmds(run, curve);
-    cmds.push(...top);
+    appendAll(cmds, segmentCmds(run, curve));
     const bottom = run.map((p) => ({ x: p.x, y: p.y0 }));
     const rev = segmentCmds(bottom, curve === 'step' ? 'step' : 'linear', true);
     // Connect: line to bottom start, then follow bottom back, then close.
     const bFirst = rev[0];
     if (bFirst && bFirst[0] === 'M') {
       cmds.push(['L', bFirst[1], bFirst[2]]);
-      cmds.push(...rev.slice(1));
+      appendAll(cmds, rev.slice(1));
     }
     cmds.push(['Z']);
   }

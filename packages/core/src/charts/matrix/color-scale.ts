@@ -38,11 +38,19 @@ export function mixHex(a: string, b: string, t: number): string {
 /**
  * Sample a sequential ramp at normalized position t in [0, 1] (clamped),
  * interpolating linearly in ramp index between adjacent steps.
+ *
+ * A non-finite `t` samples the ramp START rather than indexing off the end.
+ * `NaN` fails every comparison, so a bare `t < 0 ? … : t > 1 ? … : t` clamp
+ * passes it straight through to `Math.floor(NaN)` → `ramp[NaN]` → `undefined`,
+ * which used to throw out of `parseHex`. Callers compute `t` as
+ * `(value - min) / (max - min)`, so a degenerate extent or a non-finite datum
+ * reaches here as `NaN`/`±Infinity` and must degrade, never throw.
  */
 export function rampColor(ramp: readonly string[], t: number): string {
   if (ramp.length === 0) return '#000000';
   const first = ramp[0] as string;
   if (ramp.length === 1) return first;
+  if (!Number.isFinite(t)) return first;
   const tt = t < 0 ? 0 : t > 1 ? 1 : t;
   const f = tt * (ramp.length - 1);
   const i = Math.min(ramp.length - 2, Math.floor(f));

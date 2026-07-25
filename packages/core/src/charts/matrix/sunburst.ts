@@ -19,6 +19,7 @@ import { formatValue } from '../../util';
 import {
   countTreeNodes,
   formatShare,
+  hierarchyAriaSummary,
   hierarchyTableRows,
   type Hierarchy,
   type HierarchyNode,
@@ -178,6 +179,11 @@ export const sunburstDefinition: ChartTypeDefinition = {
 
   a11yTable(ctx): A11yTableSpec {
     return { columns: ['Node', 'Value', 'Share'], rows: hierarchyTableRows(buildFor(ctx).h) };
+  },
+
+  /** Nested nodes, not "points" — see `hierarchyAriaSummary`. */
+  a11ySummary(ctx): string | null {
+    return hierarchyAriaSummary(buildFor(ctx).h);
   },
 
   keyboardNav(model) {

@@ -7,14 +7,14 @@ import {
   SUNBURST_START_ANGLE as START_ANGLE,
 } from '../src/charts/matrix/sunburst';
 import { lightTheme } from '../src/theme';
-import type { ChartData, TreeNode, DataValue } from '../src/types';
+import type { ChartData, TreeNode } from '../src/types';
 import { cleanupDom, ctxOf, key, mount, paintedText, pointerMove } from './helpers';
 
 registerMatrixChartTypes();
 afterEach(cleanupDom);
 
 const treeData = (nodes: TreeNode[]): ChartData => ({
-  series: [{ name: 'Total', data: nodes as unknown as DataValue[] }],
+  series: [{ name: 'Total', data: nodes }],
 });
 
 const nested: TreeNode[] = [

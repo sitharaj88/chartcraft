@@ -11,6 +11,7 @@
  * `dataIndex` in events is the bin index.
  */
 import type { ChartData, ChartType, DataValue, TooltipPoint } from '../../types';
+import { dataValuesOf } from '../../data/normalize';
 import type { ChartTypeDefinition } from '../registry';
 import type { ContinuousScale, HoverState, PointPos, RenderContext, TypeGeom } from '../../layout';
 import type { A11yTableSpec } from '../../a11y';
@@ -56,10 +57,16 @@ export function histogramBinData(
 ): { edges: number[]; countsBySeries: number[][] } {
   const perSeries = data.series.map((s) => ({
     visible: s.visible !== false,
-    values: rawSampleValues(s.data),
+    values: rawSampleValues(dataValuesOf(s.data)),
   }));
   const combined: number[] = [];
-  for (const s of perSeries) if (s.visible) combined.push(...s.values);
+  // Element-wise, NOT `push(...s.values)`: a spread becomes an argument list,
+  // which V8 caps near 125k entries, and a histogram's input is raw samples —
+  // unbounded, caller-supplied. See the same fix in `charts/curves.ts`.
+  for (const s of perSeries) {
+    if (!s.visible) continue;
+    for (let i = 0; i < s.values.length; i++) combined.push(s.values[i] as number);
+  }
   const edges = binEdges(combined, bins);
   const countsBySeries = perSeries.map((s) => (s.visible && edges.length >= 2 ? binCounts(s.values, edges) : []));
   return { edges, countsBySeries };

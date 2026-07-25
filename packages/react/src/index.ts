@@ -28,6 +28,27 @@ export {
   FunnelChart,
   RadarChart,
   GaugeChart,
+  // v0.3 chart types
+  RangeareaChart,
+  BulletChart,
+  DumbbellChart,
+  LollipopChart,
+  SlopeChart,
+  StreamgraphChart,
+  MarimekkoChart,
+  PyramidChart,
+  CalendarChart,
+  RadialbarChart,
+  RoseChart,
+  ViolinChart,
+  ParallelChart,
+  IcicleChart,
+  CirclepackChart,
+  WordcloudChart,
+  SankeyChart,
+  GanttChart,
+  ChoroplethChart,
+  NetworkChart,
 } from './Chart';
 
 export type { ChartInstance, ChartProps, TypedChartProps, ChartEventProps } from './Chart';
@@ -50,4 +71,18 @@ export type {
   ChartEventMap,
   PointEvent,
   Theme,
+  // v0.3 feature options & payloads
+  DataLabelOptions,
+  Annotation,
+  ZoomOptions,
+  ZoomRange,
+  ErrorBarOptions,
+  TrendlineOptions,
+  GeoFeatureCollection,
+  // v0.3 decoration/overlay plumbing (advanced: custom decorators)
+  Decorator,
+  DecoratorContext,
+  DecoratorHost,
+  DecorationLayer,
+  Viewport,
 } from '@chartcraft/core';

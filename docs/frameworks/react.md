@@ -38,13 +38,15 @@ import { Chart } from '@chartcraft/react';
 
 | Prop | Type | Notes |
 |---|---|---|
-| …every `ChartOptions` field | — | `type`, `data`, `theme`, `title`, `subtitle`, `width`, `height`, `padding`, `xAxis`, `yAxis`, `stacked`, `horizontal`, `legend`, `tooltip`, `animation`, `downsample`, `a11y` |
+| …every `ChartOptions` field | — | `type`, `data`, `theme`, `title`, `subtitle`, `width`, `height`, `padding`, `xAxis`, `yAxis`, `stacked`, `horizontal`, `legend`, `tooltip`, `animation`, `downsample`, `a11y`, plus the v0.3 fields (`dataLabels`, `annotations`, `zoom`) and every per-type option block |
 | `className` | `string` | applied to the container element |
 | `style` | `React.CSSProperties` | applied to the container element |
 | `onPointClick` | `(ev: PointEvent) => void` | bridges the `pointclick` event |
 | `onPointEnter` | `(ev: PointEvent) => void` | bridges `pointenter` |
 | `onPointLeave` | `(ev: PointEvent) => void` | bridges `pointleave` |
 | `onLegendToggle` | `(ev: { seriesId: string; visible: boolean }) => void` | bridges `legendtoggle` |
+| `onZoom` | `(ev: ChartEventMap['zoom']) => void` | **v0.3.** Bridges `zoom` (payload `null` on reset) |
+| `onAnnotationClick` | `(ev: ChartEventMap['annotationclick']) => void` | **v0.3.** Bridges `annotationclick` |
 
 Lifecycle mapping:
 
@@ -58,11 +60,18 @@ Lifecycle mapping:
 
 ## Per-type convenience components
 
-One per chart type — identical props minus `type`: `LineChart`, `AreaChart`,
-`BarChart`, `ScatterChart`, `PieChart`, `DonutChart`, and (v0.2)
-`BubbleChart`, `SparklineChart`, `HistogramChart`, `BoxplotChart`,
-`CandlestickChart`, `OhlcChart`, `WaterfallChart`, `HeatmapChart`,
-`TreemapChart`, `SunburstChart`, `FunnelChart`, `RadarChart`, `GaugeChart`:
+One per chart type — **39 of them**, identical props minus `type`:
+
+- **v0.1** `LineChart`, `AreaChart`, `BarChart`, `ScatterChart`, `PieChart`,
+  `DonutChart`
+- **v0.2** `BubbleChart`, `SparklineChart`, `HistogramChart`, `BoxplotChart`,
+  `CandlestickChart`, `OhlcChart`, `WaterfallChart`, `HeatmapChart`,
+  `TreemapChart`, `SunburstChart`, `FunnelChart`, `RadarChart`, `GaugeChart`
+- **v0.3** `RangeareaChart`, `BulletChart`, `DumbbellChart`, `LollipopChart`,
+  `SlopeChart`, `StreamgraphChart`, `MarimekkoChart`, `PyramidChart`,
+  `CalendarChart`, `RadialbarChart`, `RoseChart`, `ViolinChart`,
+  `ParallelChart`, `IcicleChart`, `CirclepackChart`, `WordcloudChart`,
+  `SankeyChart`, `GanttChart`, `ChoroplethChart`, `NetworkChart`
 
 ```tsx
 import { AreaChart } from '@chartcraft/react';

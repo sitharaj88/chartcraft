@@ -12,6 +12,22 @@ export { lightTheme, darkTheme, categoricalPalette, sequentialPalette } from './
 export { LinearScale, TimeScale, BandScale, LogScale } from './scales';
 export { downsampleLTTB } from './data/downsample';
 
+// v0.3 decoration/overlay plumbing (cross-cutting features register here;
+// no chart type ever knows about them). See src/charts/AUTHORING.md.
+export {
+  registerDecorator,
+  unregisterDecorator,
+  decorators,
+  clearDecorators,
+} from './decorate';
+export type {
+  Decorator,
+  DecoratorContext,
+  DecoratorHost,
+  DecorationLayer,
+  Viewport,
+} from './decorate';
+
 // Every public type is exported.
 export type {
   Chart,
@@ -19,9 +35,16 @@ export type {
   ChartType,
   ChartData,
   SeriesOptions,
+  /** The union behind `SeriesOptions.type` (the combo mark override). */
+  SeriesKind,
+  SeriesData,
   DataValue,
   DataPoint,
   TreeNode,
+  // Graph payload for `sankey` / `network` (the contract's `{ nodes, links }`).
+  GraphData,
+  GraphNodeInput,
+  GraphLinkInput,
   AxisOptions,
   LegendOptions,
   TooltipOptions,
@@ -31,4 +54,12 @@ export type {
   ChartEventMap,
   PointEvent,
   Theme,
+  // v0.3
+  ErrorBarOptions,
+  TrendlineOptions,
+  DataLabelOptions,
+  Annotation,
+  ZoomOptions,
+  ZoomRange,
+  GeoFeatureCollection,
 } from './types';

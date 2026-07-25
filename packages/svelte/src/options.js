@@ -4,8 +4,18 @@
  * .svelte files.
  */
 
-/** Core event names bridged (via createEventDispatcher) by every component. */
-export const EVENTS = /** @type {const} */ (['pointclick', 'pointenter', 'pointleave', 'legendtoggle']);
+/**
+ * Core event names bridged (via createEventDispatcher) by every component.
+ * `zoom` and `annotationclick` are the v0.3 additions.
+ */
+export const EVENTS = /** @type {const} */ ([
+  'pointclick',
+  'pointenter',
+  'pointleave',
+  'legendtoggle',
+  'zoom',
+  'annotationclick',
+]);
 
 /**
  * Merge a fixed chart type into type-less options (used by the per-type

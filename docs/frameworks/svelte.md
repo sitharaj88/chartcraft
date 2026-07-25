@@ -54,6 +54,8 @@ using Svelte 4 `on:` syntax (fully compatible with Svelte 5):
 | `on:pointclick` | `CustomEvent<PointEvent>` — payload in `e.detail` |
 | `on:pointenter` / `on:pointleave` | `CustomEvent<PointEvent>` |
 | `on:legendtoggle` | `CustomEvent<{ seriesId: string; visible: boolean }>` |
+| `on:zoom` | **v0.3.** `CustomEvent<{ x?: [number, number]; y?: [number, number] } \| null>` |
+| `on:annotationclick` | **v0.3.** `CustomEvent<{ index: number; annotation: Annotation }>` |
 
 Lifecycle mapping: `onMount` → `createChart`; reactive `options` change →
 `chart.update`; destroy → `chart.destroy`.
@@ -87,12 +89,19 @@ In Svelte 5 runes mode, hold the options in `$state` and mutate naturally:
 
 ## Per-type convenience components
 
-One per chart type — same interface, minus `type` inside `options`:
-`LineChart`, `AreaChart`, `BarChart`, `ScatterChart`, `PieChart`,
-`DonutChart`, and (v0.2) `BubbleChart`, `SparklineChart`, `HistogramChart`,
-`BoxplotChart`, `CandlestickChart`, `OhlcChart`, `WaterfallChart`,
-`HeatmapChart`, `TreemapChart`, `SunburstChart`, `FunnelChart`,
-`RadarChart`, `GaugeChart`:
+One per chart type — **39 of them**, same interface, minus `type` inside
+`options`:
+
+- **v0.1** `LineChart`, `AreaChart`, `BarChart`, `ScatterChart`, `PieChart`,
+  `DonutChart`
+- **v0.2** `BubbleChart`, `SparklineChart`, `HistogramChart`, `BoxplotChart`,
+  `CandlestickChart`, `OhlcChart`, `WaterfallChart`, `HeatmapChart`,
+  `TreemapChart`, `SunburstChart`, `FunnelChart`, `RadarChart`, `GaugeChart`
+- **v0.3** `RangeareaChart`, `BulletChart`, `DumbbellChart`, `LollipopChart`,
+  `SlopeChart`, `StreamgraphChart`, `MarimekkoChart`, `PyramidChart`,
+  `CalendarChart`, `RadialbarChart`, `RoseChart`, `ViolinChart`,
+  `ParallelChart`, `IcicleChart`, `CirclepackChart`, `WordcloudChart`,
+  `SankeyChart`, `GanttChart`, `ChoroplethChart`, `NetworkChart`
 
 ```svelte
 <DonutChart

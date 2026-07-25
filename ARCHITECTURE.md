@@ -89,8 +89,26 @@ pipeline, wrappers, and a11y layer pick it up automatically. Combo charts
 (per-series `type` on cartesian roots) mix line/bar/area/scatter series on
 one shared y-axis — the one-axis rule is non-negotiable.
 
-## Roadmap (post-v0.2)
+## Decorations & viewport (v0.3)
+
+Two pipeline extensions keep cross-cutting features out of the chart types:
+
+- **Decorators** — error bars, trendlines, data labels, annotations and the
+  brush rectangle draw through a pipeline-level decorator list (each gets the
+  plot rect, scales, model, theme and renderer) plus an optional per-type
+  `decorations(ctx, layer)` stage. No chart type knows a feature exists, and
+  no feature needs a per-type branch.
+- **Viewport** — zoom/pan is expressed as optional x/y domain overrides
+  consumed by the layout stage. Downsampling re-runs inside the viewport, so
+  zooming into a million points reveals genuine detail rather than a
+  magnified approximation.
+
+Stochastic layouts (word cloud, force-directed network) are **seeded and
+deterministic** — no `Math.random()` — so renders are reproducible and
+unit-testable.
+
+## Roadmap (post-v0.3)
 
 - SVG + WebGL renderers, Angular & Solid wrappers, SSR snapshot rendering,
-  image/PDF export, streaming data API, plugin system, visual regression
+  PDF export, streaming data API, public plugin API, visual regression
   harness.

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { PointEvent } from '../src/index';
 import { lightTheme } from '../src/index';
 import { registerStatisticalChartTypes } from '../src/charts/statistical';
-import { computeWaterfallSteps, stepColor } from '../src/charts/statistical/waterfall';
+import { computeWaterfallSteps, stepColor, waterfallValueDomain } from '../src/charts/statistical/waterfall';
 import { isChartTypeRegistered } from '../src/charts/registry';
 import { cleanupDom, ctxOf, key, mount } from './helpers';
 
@@ -90,10 +90,12 @@ describe('waterfall — rendering', () => {
   });
 
   it('the y domain covers the running-total extent (niced), including zero', () => {
+    // Supplied by the pipeline's `extendValueDomain` stage; the caller's
+    // `yAxis` is left alone (and so is `getOptions()`).
     const { chart } = mount({ type: 'waterfall', data });
-    const o = chart.getOptions();
-    expect(o.yAxis!.min).toBe(0);
-    expect(o.yAxis!.max).toBe(120);
+    expect(chart.getOptions().yAxis!.min).toBeUndefined();
+    expect(chart.getOptions().yAxis!.max).toBeUndefined();
+    expect(waterfallValueDomain(data)).toEqual([0, 120]);
   });
 
   it('registration is idempotent and covers all six statistical types', () => {

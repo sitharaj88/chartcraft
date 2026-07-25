@@ -28,8 +28,8 @@ const V02_TYPES: ChartType[] = [
 ];
 
 describe('chart-type registry', () => {
-  it('declares all 19 contract ids', () => {
-    expect(CHART_TYPE_IDS).toHaveLength(19);
+  it('declares all 39 contract ids (19 from v0.1/v0.2 + 20 from v0.3)', () => {
+    expect(CHART_TYPE_IDS).toHaveLength(39);
     for (const id of [...V01_TYPES, 'sparkline', ...V02_TYPES]) {
       expect(CHART_TYPE_IDS).toContain(id);
     }
@@ -67,11 +67,14 @@ describe('chart-type registry', () => {
   });
 
   it('unknown ids throw an "unknown chart type" error (and cannot be registered)', () => {
+    // 'sankey' became a real contract id in v0.3 — use an id no contract declares.
     const el = document.createElement('div');
     document.body.appendChild(el);
-    expect(() => createChart(el, { type: 'sankey' as ChartType, data })).toThrow(/unknown chart type 'sankey'/);
+    expect(() => createChart(el, { type: 'quantumplot' as ChartType, data })).toThrow(
+      /unknown chart type 'quantumplot'/,
+    );
     expect(() =>
-      registerChartType({ id: 'sankey' } as unknown as ChartTypeDefinition),
+      registerChartType({ id: 'quantumplot' } as unknown as ChartTypeDefinition),
     ).toThrow(/cannot register unknown chart type/);
   });
 

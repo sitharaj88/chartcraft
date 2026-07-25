@@ -79,6 +79,34 @@ x-values as row headers, proper `<th>` scope markup — controlled by
 The table updates with `chart.update`/`setData`, uses your tick formatters
 for values, and renders `null` gaps as empty cells (announced as such).
 
+**All 39 chart types ship a table**, with columns appropriate to their shape
+rather than a lowest-common-denominator x/y grid: open/high/low/close for OHLC,
+indented label + value + share for hierarchies, the five-number summary plus `n`
+for violins, `Task | Start | End | Duration` for a gantt, `Node / link | Source |
+Target | Value` for a sankey, bin ranges + counts for a histogram, a `Total`
+column for a streamgraph, width shares for a marimekko, and `no data` rows for
+choropleth features with no datum. Cross-cutting features contribute too — error
+bars add `± low` / `± high` columns.
+
+::: warning Downsampled series have a downsampled table
+[LTTB downsampling](performance.md#lttb-downsampling) runs on the way into the
+data model, which backs both the canvas *and* the parallel DOM. So on a series
+above `downsample.threshold` the table (and keyboard navigation) describes the
+retained points — ~5,000 rows for a 60,000-point series — and follows the
+[zoom window](features/zoom-pan-brush.md) when one is active. The table is always
+a faithful description of *the chart*; it is not a full data dump. Turn
+downsampling off for charts where every sample must be readable.
+:::
+
+::: tip `exportData()` emits exactly this table
+There is **one** table spec, and both the DOM table and
+[`exportData()`](features/export.md) are built from it, so the CSV/JSON a sighted
+user downloads and the table a screen reader reads can never disagree. That also
+means `exportData()` keeps working with `table: 'off'`, and that a data row a
+chart could not *draw* (an unmatched choropleth region, an unplaceable word cloud
+term) is still in the table and still in the export — nothing is silently lost.
+:::
+
 ## Keyboard navigation
 
 With `a11y.keyboard: true` (the default), the chart is focusable (a single
@@ -96,6 +124,31 @@ Keyboard focus mirrors hover: the focused point gets the same visual
 highlight and tooltip as a hovered point, and fires the same
 `pointenter`/`pointleave`/`pointclick` events (with
 `clientX === clientY === -1` so your handlers can tell the origin).
+
+**Every one of the 39 types is keyboard-navigable**, each walking its own natural
+reading order: heatmap cells row-major, funnel stages, hierarchy nodes
+depth-first, calendar days in data order, word-cloud terms by rank, network nodes
+by degree, and a sankey's one flat sequence of *each node followed by its own
+outgoing links*. Whatever the order, `Enter` fires `pointclick` with a
+`dataIndex` that means something for that type, and the live region always names
+the focused mark in full.
+
+### Zoom does not take the arrow keys
+
+Where [zoom](features/zoom-pan-brush.md) is enabled, the contract's "arrows pan
+when zoomed" is resolved in accessibility's favour:
+
+- **plain arrows always navigate points**, zoomed or not — they are never
+  intercepted;
+- **`Shift`+arrow pans**, and only when a viewport is actually active and that
+  axis is zoomable;
+- **`Escape`** resets the zoom when zoomed, and otherwise falls through to clear
+  the focused datum;
+- `+` / `-` zoom, and the navigation state machine ignores those keys, so there is
+  no conflict.
+
+Claimed keys are intercepted in the capture phase, so keyboard focus can never end
+up hidden behind a panned viewport.
 
 ### Live announcements
 

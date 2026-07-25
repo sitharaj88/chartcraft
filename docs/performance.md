@@ -55,8 +55,23 @@ downsample?: { enabled?: boolean; threshold?: number };
 // default: { enabled: true, threshold: 5000 }  (line/area/scatter only)
 ```
 
-Downsampling is render-side only: tooltips, events, the data table, and axis
-extents work against your full data. `null` gaps are preserved.
+`null` gaps are preserved, and your retained options keep every point —
+`getOptions().data` still reports all 60,000 samples you passed.
+
+::: warning What downsampling *does* affect
+Downsampling happens on the way into the data **model**, not at the last drawing
+step, so the retained points are what the chart reasons about: hover targets,
+`PointEvent.dataIndex`, keyboard navigation, the accessibility **data table** and
+therefore [`exportData()`](features/export.md) all describe the retained
+(downsampled) points, not the raw array. A 60,000-point series at the default
+threshold reports ~5,000 table rows.
+
+That is a deliberate consequence of one model backing both the pixels and the
+parallel DOM (they can never disagree), but it means the table is a faithful
+description of *the chart*, not a full data dump. When exact values matter for
+every sample, export from your own data source, or set
+`downsample: { enabled: false }` on charts whose point counts are bounded.
+:::
 
 Live — 50,000 points; toggle downsampling and compare the render time:
 
@@ -86,6 +101,62 @@ network transfer):
 ```ts
 import { downsampleLTTB } from '@chartcraft/core';
 ```
+
+## Zoom and downsampling
+
+These two features are designed to work together, and the interaction is the
+reason zooming into a huge series is worth doing at all:
+
+**For series above `downsample.threshold`, points are first sliced to the visible
+window** (padded by one point on each side so lines still exit the plot edges),
+**and only then LTTB'd — and only if the window still exceeds the threshold.**
+
+The consequences:
+
+- **Zooming reveals real detail.** You are not magnifying a downsampled picture:
+  a 1M-point series windowed to 3,000 points draws every one of them. A spike that
+  LTTB kept as one sample at full extent resolves into its actual shape.
+- **The accessibility table follows the window too.** Zoom a 60,000-point series
+  to one hour and the table (and `exportData()`) describe those ~120 points —
+  keyboard users navigate exactly what is on screen, at the same fidelity.
+- **Zoomed frames get cheaper, not dearer.** Fewer candidate points enter LTTB, so
+  the deeper you zoom the less work each frame is.
+- **Series below the threshold are never windowed or touched**, which keeps every
+  pre-v0.3 render path byte-identical.
+- The full-extent bounds used to clamp a gesture are captured from the layout
+  whenever the chart is unzoomed, because the model's x-domain itself narrows to
+  the window once a large series is windowed.
+
+Two costs to know: each viewport change re-runs windowing + LTTB + layout (a
+model-level pass, not a per-frame one — that is why a pan writes the viewport
+during the gesture and emits its event once on release), and `zoom` on a chart
+with `animation: true` will animate between windows. For huge series, pass
+`animation: false` as the [zoom demo](features/zoom-pan-brush.md) does.
+
+## Deterministic layouts
+
+Three v0.3 types have layouts that would traditionally use `Math.random()`:
+`wordcloud` (spiral placement), `circlepack` (Welzl's smallest enclosing circle)
+and `network` (a force simulation). **None of them do.**
+
+- Each uses one **seeded** generator (mulberry32); `network.fixedSeed` (default
+  `1`) is the only knob, and the same graph plus the same seed always produces the
+  same picture.
+- The force simulation runs a **fixed iteration count to completion** — no
+  `alphaMin` early exit, no `requestAnimationFrame` loop: simulate, then draw.
+  Accumulation order is fixed everywhere (bodies in index order, quadtree
+  quadrants NW/NE/SW/SE, links in input order), and coincident bodies are
+  separated by an index-derived epsilon rather than a random jiggle. Repulsion is
+  Barnes–Hut, O(n log n).
+- The simulation runs in **abstract units** and is fitted to the plot afterwards,
+  so a **resize re-fits the same graph** instead of computing a different one.
+  Results are memoized under a structural key (bounded to 16 entries) purely to
+  avoid recomputing on resize; the memo returns byte-identical values.
+
+Why this belongs on a performance page: determinism is what makes these layouts
+*testable* and *cacheable*. A layout that differs per render cannot be memoized
+across resizes, cannot be snapshot-tested, and turns every bug report into "it
+looked different on my machine".
 
 ## `update()` vs recreate
 

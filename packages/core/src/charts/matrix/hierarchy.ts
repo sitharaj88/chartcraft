@@ -178,3 +178,24 @@ export function hierarchyTableRows(h: Hierarchy): { header: string; cells: strin
     cells: [formatValue(n.value), formatShare(n.value, h.total)],
   }));
 }
+
+/**
+ * Accessible-name clause for the four hierarchy types (treemap, sunburst,
+ * icicle, circle-packing), which all build the same `Hierarchy`.
+ *
+ * A hierarchy's marks are NESTED NODES, so the generic "N series and M points"
+ * clause described the wrong thing at the wrong depth: it reported the
+ * top-level count while the chart drew every leaf and the data table listed
+ * every node. Depth and total are what a reader needs before deciding whether
+ * to walk a 400-row indented table.
+ */
+export function hierarchyAriaSummary(h: Hierarchy): string | null {
+  if (h.nodes.length === 0) return 'no data';
+  const roots = h.roots.length;
+  const leaves = h.leaves.length;
+  const depth = h.maxDepth + 1;
+  return (
+    `${roots} top-level ${roots === 1 ? 'group' : 'groups'}, ${leaves} ${leaves === 1 ? 'leaf' : 'leaves'}, ` +
+    `${depth} ${depth === 1 ? 'level' : 'levels'} deep, total ${formatValue(h.total)}`
+  );
+}

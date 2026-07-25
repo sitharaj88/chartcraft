@@ -11,7 +11,8 @@
  * LEAVES depth-first. A11y table = indented label + value + share.
  * Tooltip = path ("A / B") + value.
  */
-import type { TooltipPoint } from '../../types';
+import type { SeriesData, TooltipPoint } from '../../types';
+import { dataValuesOf } from '../../data/normalize';
 import type { Rect, TypeGeom, PointPos } from '../../layout';
 import type { ChartTypeDefinition, DefinitionContext } from '../registry';
 import type { A11yTableSpec } from '../../a11y';
@@ -22,6 +23,7 @@ import { contrastInk } from './color-scale';
 import {
   buildHierarchy,
   countTreeLeaves,
+  hierarchyAriaSummary,
   hierarchyTableRows,
   treeRoots,
   formatShare,
@@ -106,11 +108,11 @@ function legendFromRoots(h: Hierarchy): LegendItem[] {
 /** Shared legend-auto policy for hierarchies: keys off top-level node count. */
 export function hierarchyResolveOptions(
   resolved: { legend: { show: boolean } },
-  raw: { legend?: boolean | { show?: boolean }; data?: { series?: { data?: readonly unknown[] }[] } },
+  raw: { legend?: boolean | { show?: boolean }; data?: { series?: { data?: SeriesData }[] } },
 ): void {
   const rawShow = typeof raw.legend === 'boolean' ? raw.legend : raw.legend?.show;
   if (rawShow !== undefined) return;
-  const topCount = (raw.data?.series?.[0]?.data ?? []).filter((d) => d !== null && d !== undefined).length;
+  const topCount = dataValuesOf(raw.data?.series?.[0]?.data).filter((d) => d !== null && d !== undefined).length;
   resolved.legend.show = topCount >= 2;
 }
 
@@ -119,7 +121,10 @@ export function buildFor(ctx: Pick<DefinitionContext, 'model' | 'opts' | 'theme'
   h: Hierarchy;
   si: number;
 } {
-  const { roots, si } = treeRoots(ctx.model, ctx.opts.data.series.map((s) => s.data));
+  const { roots, si } = treeRoots(
+    ctx.model,
+    ctx.opts.data.series.map((s) => dataValuesOf(s.data)),
+  );
   return { h: buildHierarchy(roots, ctx.theme), si };
 }
 
@@ -205,6 +210,11 @@ export const treemapDefinition: ChartTypeDefinition = {
   a11yTable(ctx): A11yTableSpec {
     // Indented label + value + share, depth-first (contract).
     return { columns: ['Node', 'Value', 'Share'], rows: hierarchyTableRows(buildFor(ctx).h) };
+  },
+
+  /** Nested nodes, not "points" — see `hierarchyAriaSummary`. */
+  a11ySummary(ctx): string | null {
+    return hierarchyAriaSummary(buildFor(ctx).h);
   },
 
   keyboardNav(model) {

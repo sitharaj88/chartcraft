@@ -16,13 +16,20 @@ interface ChartData {
 interface SeriesOptions {
   id?: string;                            // stable identity; defaults to name
   name: string;                           // legend & tooltip label (required)
-  data: DataValue[];
+  data: SeriesData;                       // DataValue[] — or a graph (see v0.3 below)
   color?: string;                         // override; otherwise palette slot by first-seen identity
   visible?: boolean;                      // default true; legend toggles this
   // line/area only:
   curve?: 'linear' | 'monotone' | 'step'; // default 'linear'
   lineWidth?: number;                     // default 2
   showMarkers?: boolean | 'auto';         // 'auto': markers when point count <= 60
+  // v0.2:
+  type?: SeriesKind;                      // combo: per-series mark override
+  sizeRange?: [number, number];           // bubble: min/max marker diameter px
+  // v0.3:
+  errorBars?: ErrorBarOptions;            // uncertainty whiskers
+  trendline?: TrendlineOptions;           // a fitted line, dashed and legend-labeled
+  lowKey?: string; highKey?: string;      // range field names / dumbbell endpoint names
 }
 ```
 
@@ -110,19 +117,109 @@ conventions:
 - **`[x, o, h, l, c]` tuples** (candlestick/OHLC): open/high/low/close per
   x. Object form: `{ x, o, h, l, c }` — no `y` needed (it defaults to the
   close).
-- **`TreeNode[]`** (treemap/sunburst): `{ label, value?, color?, children? }`,
-  nested; a parent's value defaults to the sum of its children. In
-  TypeScript, cast to `DataValue[]` (the union doesn't name `TreeNode`) or
-  pass the value as `y`.
-- **Raw samples** (histogram/boxplot): a histogram series is just
-  `number[]` — the raw samples, binned by the chart. A boxplot category is
-  either a 5-number object (`{ min, q1, median, q3, max, outliers? }`) or a
-  raw `number[]`, summarized by the chart (raw arrays need a cast in
-  TypeScript).
+- **`TreeNode[]`** (treemap/sunburst, and v0.3's icicle/circlepack):
+  `{ label, value?, color?, children? }`, nested; a parent's value defaults to
+  the sum of its children. Since v0.3 `DataPoint` declares `value`, so a genuine
+  `TreeNode[]` **needs no cast**.
+- **Raw samples** (histogram/boxplot, and v0.3's violin): a histogram series is
+  just `number[]` — the raw samples, binned by the chart. A boxplot or violin
+  category is either a 5-number object
+  (`{ min, q1, median, q3, max, outliers? }`, boxplot only) or a raw `number[]`,
+  summarized by the chart. **Raw per-category arrays still need a TypeScript
+  assertion** (`values as unknown as DataValue`): the union names only the
+  2/3/5-element tuple shapes.
 
 Waterfall points add `isTotal: true` to mark absolute totals among deltas.
 Full field-by-field semantics: [`DataPoint`](../api/core.md#datapoint) in the
 API reference, and each type's [example page](../examples/index.md).
+
+## v0.3 data shapes
+
+The 20 types added in v0.3 keep the same model. Three additions are worth
+learning once:
+
+### Range points — `{ x, low, high }`
+
+A band, a dumbbell's two ends, a per-row bullet range and a gantt span are all
+"this datum has two bounds":
+
+```ts
+const forecast = {
+  categories: ['Jul', 'Aug', 'Sep'],
+  series: [
+    { name: '80% interval', data: [{ low: 4.28, high: 4.62 }, { low: 4.34, high: 4.86 }, { low: 4.39, high: 5.09 }] },
+    { name: 'Forecast', data: [4.45, 4.6, 4.74] },
+  ],
+};
+```
+
+`[x, low, high]` triples work too — on range types a three-element tuple is read
+as a range rather than as a bubble size. `SeriesOptions.lowKey`/`highKey` rename
+the fields (`lowKey: 'p10'`), and on a dumbbell those names double as the
+endpoint labels in the legend and table.
+
+**Both bounds are required.** A datum with only one is a **gap**, not a half-band
+— and a band run of a single point draws nothing, because a closed band needs two
+x positions. `low` and `high` always join the value extent, so no range type needs
+axis plumbing of its own.
+
+### Graph data — `{ nodes, links }`
+
+`sankey` and `network` are the two types whose whole series *is* the graph, so
+`SeriesOptions.data` is widened to `SeriesData`:
+
+```ts
+type SeriesData = DataValue[] | GraphData;
+
+interface GraphData {
+  nodes: readonly { id?: string; label?: string; color?: string; group?: string; value?: number }[];
+  links: readonly { source: string | number; target: string | number; value?: number;
+                    label?: string; color?: string }[];
+}
+```
+
+```ts
+const flow = {
+  series: [
+    {
+      name: 'Users',
+      data: {
+        nodes: [{ id: 'signup', label: 'Signed up' }, { id: 'trial', label: 'Started trial' }],
+        links: [{ source: 'signup', target: 'trial', value: 5100 }],
+      },
+    },
+  ],
+};
+```
+
+Both members typecheck with **no cast**. `source`/`target` accept a node `id` or
+a 0-based node index. A link naming a node that does not exist **throws** (a
+silently dropped edge is a wrong picture), and a `sankey` cycle throws too.
+
+::: tip These two types normalize your input
+`sankey`, `gantt` and `network` rewrite their resolved `data` into one synthetic
+series — marks in reading order, tasks in row order, nodes by degree — so every
+mark has a real backing point and events, tooltips, focus and the a11y layer work
+with no per-type special cases. Your objects are never mutated, but
+`getOptions().data` reports the normalized form, and `PointEvent.dataIndex` is
+that reading order (for `network`, a degree rank).
+:::
+
+### Other v0.3 object fields
+
+`target` (bullet), `start`/`end` (gantt spans), `group` (gantt swimlane, network
+cluster, parallel class), `weight` (wordcloud, an alias of `y`), `eLow`/`eHigh`
+(error-bar bounds) and `value` (hierarchy nodes). Everything is optional and
+carried through normalization losslessly — see
+[`DataPoint`](../api/core.md#datapoint).
+
+Two shapes deserve a warning of their own:
+
+- **`calendar` dates are UTC**, unconditionally. Build them with `Date.UTC(...)`
+  or from `'YYYY-MM-DD'` strings, or the same datum will land in different cells
+  in different time zones.
+- **`parallel` series carry one value per dimension**, named by `parallel.axes`
+  (or `categories`) — the array order *is* the axis order.
 
 ## Categories vs `[x, y]` pairs
 

@@ -163,7 +163,15 @@ describe('funnel — interaction', () => {
     key(el, 'ArrowRight');
     expect(enters.map((e) => e.dataIndex)).toEqual([0, 1]);
     const region = el.querySelector('.chartcraft-announcer') as HTMLElement;
-    expect(region.textContent).toBe('Mid: 500. Conversions, point 2 of 3.');
+    // ADAPTED (quality audit): this asserted the PIPELINE DEFAULT announcement
+    // ("<x>: <y>. <series>, point i of n."), which was the defect for a funnel
+    // rather than the requirement. The default reads `x` — null for the
+    // `{ label, y }` data shape the contract admits, so a label-only funnel
+    // announced the point INDEX ("0: 500") — and it never carries the
+    // "% of first stage" conversion that is the reason a funnel exists and that
+    // the contract puts in this type's data table. Funnel now supplies its own
+    // `announce`; the stage name, value and both conversion figures are asserted.
+    expect(region.textContent).toBe('Mid: 500, 50% of the first stage, 50% of the previous stage. Stage 2 of 3.');
     key(el, 'End');
     expect(enters.at(-1)!.dataIndex).toBe(2);
   });

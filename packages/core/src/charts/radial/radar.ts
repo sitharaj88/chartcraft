@@ -12,9 +12,10 @@
  *   order); a11y table = category rows x series columns.
  */
 import type { ChartOptions } from '../../types';
+import { dataValuesOf } from '../../data/normalize';
 import type { PointPos, Rect, RenderContext, TypeGeom } from '../../layout';
 import { axisTickFont } from '../../layout';
-import { seriesColor } from '../../model';
+import { seriesColor, type DataModel } from '../../model';
 import type { ChartTypeDefinition } from '../registry';
 import type { PathCmd } from '../../render/renderer';
 import type { A11yTableSpec } from '../../a11y';
@@ -73,6 +74,35 @@ export function radarVertex(frame: RadarFrame, i: number, value: number): { x: n
 }
 
 // ---------------------------------------------------------------------------
+// Spoke resolution.
+//
+// `data.categories` NAMES the spokes, but it does not DEFINE how many there
+// are: `validateRadarOptions` accepts `{ series: [{ data: [3, 4, 2, 5] }] }`
+// with no categories at all (its `rawSpokeCount` falls back to the longest
+// series), and the contract's radar row only requires "`categories` = spokes
+// (3–12)" alongside "series values >= 0".
+//
+// Reading the spoke count as `model.categories?.length ?? 0` therefore made
+// legal, validation-passing data render a BLANK chart with an EMPTY data table,
+// zero keyboard stops and a silent announcer — `exportData()` returned a bare
+// header row. The count now falls back to the point count exactly as the
+// sibling polar type does (`rose.ts`: `Math.max(points.length, categories…)`),
+// and unnamed spokes are labelled by ordinal position.
+
+/** How many spokes this model has: named categories, else the longest series. */
+export function radarSpokeCount(model: DataModel): number {
+  const named = model.categories?.length ?? 0;
+  if (named > 0) return named;
+  return model.series.reduce((n, s) => Math.max(n, s.points.length), 0);
+}
+
+/** Label for spoke `i`: its category name, else an ordinal fallback. */
+export function radarSpokeLabel(model: DataModel, i: number): string {
+  const c = model.categories?.[i];
+  return c === undefined ? `Spoke ${i + 1}` : formatValue(c);
+}
+
+// ---------------------------------------------------------------------------
 // Validation (raw options, so createChart fails fast before any DOM work).
 
 function rawSpokeCount(raw: ChartOptions): number {
@@ -84,8 +114,9 @@ function rawSpokeCount(raw: ChartOptions): number {
   let sawString = false;
   let maxLen = 0;
   for (const s of raw.data?.series ?? []) {
-    maxLen = Math.max(maxLen, s.data?.length ?? 0);
-    for (const v of s.data ?? []) {
+    const values = dataValuesOf(s.data);
+    maxLen = Math.max(maxLen, values.length);
+    for (const v of values) {
       const x = Array.isArray(v) ? v[0] : v !== null && typeof v === 'object' ? v.x : undefined;
       if (typeof x === 'string') {
         sawString = true;
@@ -106,7 +137,7 @@ function validateRadarOptions(raw: ChartOptions): void {
     );
   }
   for (const s of raw.data?.series ?? []) {
-    (s.data ?? []).forEach((v, i) => {
+    dataValuesOf(s.data).forEach((v, i) => {
       const y = typeof v === 'number' ? v : Array.isArray(v) ? v[1] : v && typeof v === 'object' ? v.y : null;
       if (typeof y === 'number' && y < 0) {
         throw new Error(
@@ -132,7 +163,7 @@ export const radarDefinition: ChartTypeDefinition = {
 
   layout(ctx): TypeGeom {
     const { model: m, layout: L, theme: t } = ctx;
-    const spokes = m.categories?.length ?? 0;
+    const spokes = radarSpokeCount(m);
     const frame = computeRadarFrame(spokes, Math.max(0, m.yDomain[1]), L.plot, t.fontSize + RADAR_LABEL_PAD);
     const pos: (PointPos | null)[][] = m.series.map((s) => {
       if (!s.visible) return [];
@@ -170,19 +201,18 @@ export const radarDefinition: ChartTypeDefinition = {
 
     // Spoke axis labels in textMuted, anchored away from the grid.
     const font = axisTickFont(t);
-    (m.categories ?? []).forEach((c, i) => {
-      if (i >= frame.angles.length) return;
+    for (let i = 0; i < frame.angles.length; i++) {
       const a = frame.angles[i] as number;
       const p = polarToCartesian(frame.cx, frame.cy, frame.r + 8, a);
       const cos = Math.cos(a);
       const sin = Math.sin(a);
-      r.text(formatValue(c), p.x, p.y, {
+      r.text(radarSpokeLabel(m, i), p.x, p.y, {
         font,
         color: t.textMuted,
         align: Math.abs(cos) < 0.35 ? 'center' : cos > 0 ? 'left' : 'right',
         baseline: Math.abs(sin) < 0.35 ? 'middle' : sin > 0 ? 'top' : 'bottom',
       });
-    });
+    }
 
     // Series: 0.15-alpha fill + 2px closed outline (null vertices = gaps).
     m.series.forEach((s, si) => {
@@ -239,8 +269,8 @@ export const radarDefinition: ChartTypeDefinition = {
 
   a11yTable(ctx): A11yTableSpec {
     const m = ctx.model;
-    const rows: A11yTableSpec['rows'] = (m.categories ?? []).map((c, i) => ({
-      header: formatValue(c),
+    const rows: A11yTableSpec['rows'] = Array.from({ length: radarSpokeCount(m) }, (_, i) => ({
+      header: radarSpokeLabel(m, i),
       cells: m.series.map((s) => {
         const y = s.points[i]?.y ?? null;
         return y === null ? '—' : formatValue(y);
@@ -250,12 +280,28 @@ export const radarDefinition: ChartTypeDefinition = {
   },
 
   keyboardNav(model) {
-    const spokes = model.categories?.length ?? 0;
+    const spokes = radarSpokeCount(model);
     return {
       seriesCount: model.series.length,
       isVisible: (si) => model.series[si]?.visible ?? false,
       pointCount: (si) => Math.min(model.series[si]?.points.length ?? 0, spokes),
     };
+  },
+
+  /**
+   * A radar vertex is identified by its SPOKE. The pipeline default reads `x`,
+   * which for a plain numeric radar series is the point index — so an unnamed
+   * spoke announced "0: 3" instead of naming the spoke. `radarSpokeLabel` gives
+   * the same name the axis label and the data table use.
+   */
+  announce(ctx, pos) {
+    const m = ctx.model;
+    const s = m.series[pos.si];
+    const p = s?.points[pos.pi];
+    if (!s || !p) return null;
+    const spokes = radarSpokeCount(m);
+    const value = p.y === null ? 'no value' : formatValue(p.y);
+    return `${radarSpokeLabel(m, pos.pi)}: ${value}. ${s.name}, spoke ${pos.pi + 1} of ${spokes}.`;
   },
 
   tooltipPoints(ctx, hit) {

@@ -5,6 +5,7 @@
  * never rides on color alone; legend "auto" keys off the slice count.
  */
 import type { ChartType, TooltipPoint } from '../types';
+import { dataValuesOf } from '../data/normalize';
 import type { PieSlice, Rect, RenderContext, TypeGeom } from '../layout';
 import { seriesColor, type DataModel } from '../model';
 import type { Theme } from '../types';
@@ -109,7 +110,7 @@ function makePieDefinition(id: ChartType): ChartTypeDefinition {
       // Legend "auto" keys off the slice count (positive slices only).
       const rawShow = typeof raw.legend === 'boolean' ? raw.legend : raw.legend?.show;
       if (rawShow === undefined) {
-        const sliceCount = (raw.data?.series?.[0]?.data ?? []).filter((d) => {
+        const sliceCount = dataValuesOf(raw.data?.series?.[0]?.data).filter((d) => {
           const y =
             typeof d === 'number' ? d : Array.isArray(d) ? d[1] : d && typeof d === 'object' ? d.y : null;
           return typeof y === 'number' && y > 0;
@@ -169,6 +170,28 @@ function makePieDefinition(id: ChartType): ChartTypeDefinition {
         isVisible: (si) => model.series[si]?.visible ?? false,
         pointCount: (si) => model.series[si]?.points.length ?? 0,
       };
+    },
+
+    /**
+     * A pie slice is identified by its LABEL and understood by its SHARE, and
+     * the pipeline default announcement can supply neither: it reads `x`, which
+     * is `null` for the `{ label, y }` data shape the contract admits (so the
+     * default announced the point INDEX — "0: 62") and it never computes the
+     * share, which is the entire reason a reader is looking at a pie.
+     */
+    announce(ctx, pos) {
+      const metas = computeSliceMeta(ctx.model, ctx.theme);
+      const total = metas.reduce((a, m) => a + m.value, 0);
+      const idx = metas.findIndex((m) => m.pi === pos.pi);
+      const meta = metas[idx];
+      if (!meta) {
+        // A non-positive / null datum: focusable, never drawn. Say so.
+        const p = ctx.model.series[pos.si]?.points[pos.pi];
+        const label = p?.label ?? (typeof p?.x === 'string' ? p.x : `Slice ${pos.pi + 1}`);
+        return `${label}: no value, not shown.`;
+      }
+      const share = total > 0 ? ` (${((meta.value / total) * 100).toFixed(1)}%)` : '';
+      return `${meta.label}: ${formatValue(meta.value)}${share}. Slice ${idx + 1} of ${metas.length}.`;
     },
 
     tooltipPoints(ctx: TooltipExtractContext, hit): TooltipPoint[] {

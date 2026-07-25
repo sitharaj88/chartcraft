@@ -12,6 +12,7 @@
  * whiskers to min/max with caps, outlier dots >= 8px diameter.
  */
 import type { ChartData, ChartType, TooltipPoint } from '../../types';
+import { dataValuesOf } from '../../data/normalize';
 import type { ChartTypeDefinition } from '../registry';
 import type { ContinuousScale, HoverState, PointPos, RenderContext, TypeGeom } from '../../layout';
 import type { A11yTableSpec } from '../../a11y';
@@ -73,35 +74,48 @@ export function boxSummaryOf(entry: unknown): FiveNumberSummary | null {
 
 /** Per-series, per-category summaries over a chart's raw data. */
 export function boxSummaries(data: ChartData): (FiveNumberSummary | null)[][] {
-  return data.series.map((s) => s.data.map((entry) => boxSummaryOf(entry)));
+  return data.series.map((s) => dataValuesOf(s.data).map((entry) => boxSummaryOf(entry)));
+}
+
+/**
+ * Value domain covering every whisker and outlier of every visible series,
+ * `nice()`d. Null when no entry yields a summary (nothing to extend).
+ * Pure, so it is unit-testable without mounting a chart.
+ */
+export function boxplotValueDomain(data: ChartData): [number, number] | null {
+  let lo = Infinity;
+  let hi = -Infinity;
+  data.series.forEach((s) => {
+    if (s.visible === false) return;
+    for (const entry of dataValuesOf(s.data)) {
+      const sum = boxSummaryOf(entry);
+      if (!sum) continue;
+      lo = Math.min(lo, sum.min, ...sum.outliers);
+      hi = Math.max(hi, sum.max, ...sum.outliers);
+    }
+  });
+  if (!Number.isFinite(lo)) return null;
+  if (lo === hi) {
+    lo -= 1;
+    hi += 1;
+  }
+  const nice = new LinearScale([lo, hi]).nice(5).domain();
+  return [nice[0], nice[1]];
 }
 
 export const boxplotDefinition: ChartTypeDefinition = {
   id: 'boxplot' as ChartType,
   needs: { cartesianAxes: true, xScale: 'band' },
 
-  resolveOptions(resolved, raw) {
-    let lo = Infinity;
-    let hi = -Infinity;
-    resolved.data.series.forEach((s) => {
-      if (s.visible === false) return;
-      for (const entry of s.data) {
-        const sum = boxSummaryOf(entry);
-        if (!sum) continue;
-        lo = Math.min(lo, sum.min, ...sum.outliers);
-        hi = Math.max(hi, sum.max, ...sum.outliers);
-      }
-    });
-    if (!Number.isFinite(lo)) return;
-    if (lo === hi) {
-      lo -= 1;
-      hi += 1;
-    }
-    const nice = new LinearScale([lo, hi]).nice(5).domain();
-    const rawY = typeof raw.yAxis === 'object' && raw.yAxis !== null ? raw.yAxis : {};
-    resolved.yAxis = { ...resolved.yAxis };
-    if (typeof rawY.min !== 'number') resolved.yAxis.min = nice[0];
-    if (typeof rawY.max !== 'number') resolved.yAxis.max = nice[1];
+  /**
+   * The value axis must cover every whisker AND every outlier. Those come from
+   * the 5-number summaries, which are computed from the RAW series data (the
+   * generic normalizer folds a `number[]` sample into a tuple shape), so the
+   * generic value extent cannot see them — this is the pipeline's
+   * `extendValueDomain` stage, not a rewrite of the caller's `yAxis`.
+   */
+  extendValueDomain(_model, opts) {
+    return boxplotValueDomain(opts.data);
   },
 
   layout(ctx): TypeGeom {
@@ -125,7 +139,7 @@ export const boxplotDefinition: ChartTypeDefinition = {
       if (!s.visible) return [];
       const slot = visIdx.indexOf(si);
       return s.points.map((p, pi): PointPos | null => {
-        const sum = boxSummaryOf(ctx.opts.data.series[si]?.data[pi]);
+        const sum = boxSummaryOf(dataValuesOf(ctx.opts.data.series[si]?.data)[pi]);
         if (!sum) return null;
         const bandStart = band.scale(bandIndexFor(m, p.xv, pi));
         const x = bandStart + slot * (slotW + BOX_SLOT_GAP) + slotW / 2;
@@ -227,7 +241,7 @@ export const boxplotDefinition: ChartTypeDefinition = {
     const rows: A11yTableSpec['rows'] = [];
     m.series.forEach((s, si) => {
       s.points.forEach((p, pi) => {
-        const sum = boxSummaryOf(ctx.opts.data.series[si]?.data[pi]);
+        const sum = boxSummaryOf(dataValuesOf(ctx.opts.data.series[si]?.data)[pi]);
         const cat = m.categories?.[bandIndexFor(m, p.xv, pi)] ?? p.x ?? pi;
         const header = multi ? `${formatValue(cat)} — ${s.name}` : formatValue(cat);
         if (!sum) {
@@ -262,7 +276,7 @@ export const boxplotDefinition: ChartTypeDefinition = {
     const s = ctx.model.series[pos.si];
     const p = s?.points[pos.pi];
     if (!s || !p) return null;
-    const sum = boxSummaryOf(ctx.opts.data.series[pos.si]?.data[pos.pi]);
+    const sum = boxSummaryOf(dataValuesOf(ctx.opts.data.series[pos.si]?.data)[pos.pi]);
     if (!sum) return null;
     const cat = ctx.model.categories?.[bandIndexFor(ctx.model, p.xv, pos.pi)] ?? p.x ?? pos.pi;
     return (
@@ -273,7 +287,7 @@ export const boxplotDefinition: ChartTypeDefinition = {
 
   tooltipPoints(ctx, hit): TooltipPoint[] {
     const tp = ctx.pointFor(hit.si, hit.pi);
-    const sum = boxSummaryOf(ctx.opts.data.series[hit.si]?.data[hit.pi]);
+    const sum = boxSummaryOf(dataValuesOf(ctx.opts.data.series[hit.si]?.data)[hit.pi]);
     if (!tp || !sum) return tp ? [tp] : [];
     tp.formattedY =
       `min ${formatValue(sum.min)} · q1 ${formatValue(sum.q1)} · median ${formatValue(sum.median)} · ` +

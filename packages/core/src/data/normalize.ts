@@ -2,7 +2,7 @@
  * Data normalization: folds the three DataValue shapes into one internal
  * point representation. Pure functions — no DOM.
  */
-import type { DataValue, TreeNode } from '../types';
+import type { DataValue, GraphData, SeriesData, TreeNode } from '../types';
 import { downsampleLTTB } from './downsample';
 
 export interface NormalizedPoint {
@@ -29,6 +29,45 @@ export interface NormalizedPoint {
   outliers?: number[];
   isTotal?: boolean;
   children?: TreeNode[];
+  // v0.3 rich fields, carried through verbatim (per-type semantics).
+  /** rangearea / bullet range / gantt span: lower bound */
+  low?: number | null;
+  /** rangearea / bullet range / gantt span: upper bound */
+  high?: number | null;
+  /** asymmetric error bar lower bound (absolute value) */
+  eLow?: number;
+  /** asymmetric error bar upper bound (absolute value) */
+  eHigh?: number;
+  /** bullet target marker */
+  target?: number;
+  /** gantt task span start (verbatim: number | Date) */
+  start?: number | Date;
+  /** gantt task span end (verbatim: number | Date) */
+  end?: number | Date;
+  /** gantt swimlane / network cluster / parallel class */
+  group?: string;
+  /** wordcloud term weight (alias of y) */
+  weight?: number;
+  /** network node id / sankey node id */
+  id?: string;
+}
+
+/**
+ * How a three-element tuple `[a, b, c]` is read (registry `needs.triple`):
+ * - 'size'  (default, v0.2 behavior): `[x, y, r]` — bubble size channel.
+ * - 'range': `[x, low, high]` — rangearea/dumbbell band (y mirrors `low` so
+ *   generic gap/domain/hit-test plumbing keeps working; `high` joins the
+ *   y-extent through the low/high extent rule in model.ts).
+ */
+export type TripleMode = 'size' | 'range';
+
+export interface NormalizeOptions {
+  /** Default 'size' — v0.2 tuple behavior is byte-identical. */
+  triple?: TripleMode;
+  /** `SeriesOptions.lowKey`: object-data field read into `low` (default 'low'). */
+  lowKey?: string;
+  /** `SeriesOptions.highKey`: object-data field read into `high` (default 'high'). */
+  highKey?: string;
 }
 
 export type Category = string | number | Date;
@@ -39,13 +78,41 @@ export function toNumericX(x: number | Date): number {
 }
 
 /**
+ * A VALUE, or null when it is not a real number.
+ *
+ * The contract's `DataValue` is `number | null` and defines `null` as "gap".
+ * `NaN` and `±Infinity` are IEEE artifacts, not data: they arrive from a failed
+ * parse, a divide-by-zero or a JSON round-trip, and every one of them is
+ * poison downstream —
+ *
+ * - `Infinity` in a series silently destroys the value domain (`max` becomes
+ *   `Infinity`, so every real datum collapses onto the baseline and the chart
+ *   renders a flat line with no error);
+ * - `NaN` reaches the renderer as a non-finite coordinate, which Canvas2D
+ *   silently *ignores* — the mark vanishes with no gap to show it was there;
+ * - a `NaN`-normalized ramp position indexes off the end of a color ramp.
+ *
+ * Folding them into `null` at the single ingest point means one code path
+ * handles "no value" for the whole pipeline: gaps in lines, skipped marks,
+ * `—` in the a11y table and in `exportData()`, and an untouched value domain.
+ */
+function value(v: number | null | undefined): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/**
  * Normalize one series' data. `categories` (when present) provides x values
  * for plain-number entries and index lookup for string x values.
  */
 export function normalizeSeriesData(
   data: readonly DataValue[],
   categories: readonly Category[] | null,
+  options?: NormalizeOptions,
 ): NormalizedPoint[] {
+  const triple: TripleMode = options?.triple ?? 'size';
+  // Only non-default key names need remapping ('low'/'high' land natively).
+  const lowKey = options?.lowKey && options.lowKey !== 'low' ? options.lowKey : null;
+  const highKey = options?.highKey && options.highKey !== 'high' ? options.highKey : null;
   const catIndex = categories ? buildCategoryIndex(categories) : null;
   const out: NormalizedPoint[] = new Array(data.length);
 
@@ -55,25 +122,32 @@ export function normalizeSeriesData(
       out[i] = {
         x: categories ? (categories[i] ?? i) : i,
         xv: i,
-        y: v ?? null,
+        y: value(v),
       };
     } else if (Array.isArray(v)) {
       const xr = v[0];
       if (v.length >= 5) {
         // [x, o, h, l, c] — y defaults to the close for tables/tooltips/domains.
         const [, o, h, l, c] = v as [number | Date, number, number, number, number];
-        out[i] = { x: xr, xv: toNumericX(xr), y: c ?? null, o, h, l, c };
+        out[i] = { x: xr, xv: toNumericX(xr), y: value(c), o, h, l, c };
       } else if (v.length === 3) {
-        // [x, y, r] bubble triple.
-        const [, yr, rr] = v as [number | Date, number, number];
-        out[i] = { x: xr, xv: toNumericX(xr), y: yr ?? null, r: rr };
+        const [, br, cr] = v as [number | Date, number, number];
+        out[i] =
+          triple === 'range'
+            ? // [x, low, high] range pair — y mirrors low.
+              { x: xr, xv: toNumericX(xr), y: value(br), low: value(br), high: value(cr) }
+            : // [x, y, r] bubble triple.
+              { x: xr, xv: toNumericX(xr), y: value(br), r: cr };
       } else {
         const yr = (v as [number | Date, number | null])[1];
-        out[i] = { x: xr, xv: toNumericX(xr), y: yr ?? null };
+        out[i] = { x: xr, xv: toNumericX(xr), y: value(yr) };
       }
     } else {
       // Object shape (DataPoint): { x?, y?, label?, color?, ...rich fields }
-      const p: NormalizedPoint = { x: null, xv: null, y: v.y ?? v.c ?? null };
+      // y falls back to the close (ohlc), then `weight` (contract: an alias of
+      // y), then `low` (a range's representative value) so the generic
+      // gap/domain/navigation plumbing works for every shape.
+      const p: NormalizedPoint = { x: null, xv: null, y: value(v.y ?? v.c ?? v.weight ?? v.low) };
       if (v.label !== undefined) p.label = v.label;
       if (v.color !== undefined) p.color = v.color;
       if (v.r !== undefined) p.r = v.r;
@@ -89,6 +163,32 @@ export function normalizeSeriesData(
       if (v.outliers !== undefined) p.outliers = v.outliers;
       if (v.isTotal !== undefined) p.isTotal = v.isTotal;
       if (v.children !== undefined) p.children = v.children;
+      // v0.3 fields — carried through verbatim, losslessly. `low`/`high` are
+      // VALUES (they join the value domain and drive band geometry), so they go
+      // through the same non-finite fold as `y`.
+      if (v.low !== undefined) p.low = value(v.low);
+      if (v.high !== undefined) p.high = value(v.high);
+      if (v.eLow !== undefined) p.eLow = v.eLow;
+      if (v.eHigh !== undefined) p.eHigh = v.eHigh;
+      if (v.target !== undefined) p.target = v.target;
+      if (v.start !== undefined) p.start = v.start;
+      if (v.end !== undefined) p.end = v.end;
+      if (v.group !== undefined) p.group = v.group;
+      if (v.weight !== undefined) p.weight = v.weight;
+      if (v.id !== undefined) p.id = v.id;
+      // Custom range field names (SeriesOptions.lowKey / highKey).
+      if (lowKey || highKey) {
+        const bag = v as unknown as Record<string, unknown>;
+        if (lowKey) {
+          const lv = bag[lowKey];
+          if (typeof lv === 'number' || lv === null) p.low = value(lv);
+        }
+        if (highKey) {
+          const hv = bag[highKey];
+          if (typeof hv === 'number' || hv === null) p.high = value(hv);
+        }
+        if (p.y === null && typeof p.low === 'number') p.y = p.low;
+      }
       const x = v.x;
       if (x === undefined) {
         p.x = categories ? (categories[i] ?? i) : i;
@@ -159,6 +259,33 @@ export function deriveCategories(seriesPoints: readonly NormalizedPoint[][]): Ca
 }
 
 /**
+ * Slice a normalized series down to the x-window `[lo, hi]` (a zoom viewport),
+ * padded by one point on each side so lines/areas still exit the plot edges.
+ * Points with an unknown `xv` (gap markers) inside the retained index range
+ * are kept. Returns an empty array when nothing falls inside the window.
+ */
+export function windowNormalized(
+  points: readonly NormalizedPoint[],
+  lo: number,
+  hi: number,
+): NormalizedPoint[] {
+  let first = -1;
+  let last = -1;
+  for (let i = 0; i < points.length; i++) {
+    const xv = points[i]?.xv;
+    if (xv === null || xv === undefined) continue;
+    if (xv >= lo && xv <= hi) {
+      if (first < 0) first = i;
+      last = i;
+    }
+  }
+  if (first < 0) return [];
+  const from = Math.max(0, first - 1);
+  const to = Math.min(points.length, last + 2);
+  return points.slice(from, to);
+}
+
+/**
  * Downsample a normalized series with LTTB while preserving null gaps:
  * each contiguous non-null run is downsampled proportionally.
  */
@@ -198,4 +325,57 @@ export function downsampleNormalized(points: NormalizedPoint[], threshold: numbe
     if (ri < runs.length - 1) out.push({ x: null, xv: null, y: null });
   });
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Range (low/high) helpers
+//
+// They live here — next to `NormalizedPoint`, in a leaf module — because BOTH
+// the model (which resolves the `'rangearea'` mark kind from the data) and the
+// band mark itself need them, and a chart-type module cannot be imported from
+// `model.ts` without closing an ESM cycle.
+
+/** A resolved `[low, high]` pair (both bounds finite). */
+export interface RangePair {
+  low: number;
+  high: number;
+}
+
+/**
+ * A point's low/high pair, but only when BOTH bounds are finite numbers — a
+ * half-open range has no band/dumbbell geometry, so it reads as a gap.
+ */
+export function rangeOf(p: NormalizedPoint | null | undefined): RangePair | null {
+  if (!p) return null;
+  const { low, high } = p;
+  if (typeof low !== 'number' || typeof high !== 'number') return null;
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
+  return { low, high };
+}
+
+/** True when at least one point of the series carries a full low/high pair. */
+export function hasRangeData(points: readonly NormalizedPoint[]): boolean {
+  for (const p of points) {
+    if (rangeOf(p)) return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// SeriesData narrowing
+//
+// `SeriesOptions.data` admits either a list of `DataValue`s or — for the two
+// GRAPH types, whose whole series IS the graph — a `GraphData` payload. Every
+// list-shaped reader goes through `dataValuesOf`, which is the ONE place that
+// narrowing happens, so no per-type module needs a cast and no caller does
+// either.
+
+/** True when a series carries a `{ nodes, links }` graph payload. */
+export function isGraphData(data: SeriesData | undefined): data is GraphData {
+  return !!data && !Array.isArray(data) && typeof data === 'object' && 'nodes' in data;
+}
+
+/** A series' value list — empty for a graph payload (it has no data values). */
+export function dataValuesOf(data: SeriesData | undefined): DataValue[] {
+  return Array.isArray(data) ? data : [];
 }

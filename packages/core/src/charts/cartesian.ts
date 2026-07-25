@@ -32,10 +32,19 @@ import type { NavContext } from '../a11y/keyboard';
 import { renderAreaKind } from './area';
 import { renderBarKind, BAR_GAP } from './bar';
 import { renderLineKind } from './line';
+import { renderRangeBandKind } from './rangeband';
 import { renderScatterKind } from './scatter';
+import { rangeOf } from '../data/normalize';
 
-/** Paint order for mixed-kind (combo) charts: areas < bars < lines < scatter. */
-export const KIND_Z_ORDER: readonly SeriesKind[] = ['area', 'bar', 'line', 'scatter'];
+/**
+ * Paint order for mixed-kind (combo) charts:
+ * range bands < areas < bars < lines < scatter.
+ *
+ * A band is the most recessive mark there is (0.18 alpha), and the canonical
+ * forecast chart puts a line ON its confidence band — so `'rangearea'` paints
+ * first.
+ */
+export const KIND_Z_ORDER: readonly SeriesKind[] = ['rangearea', 'area', 'bar', 'line', 'scatter'];
 
 export interface CartesianConfig {
   id: ChartType;
@@ -75,6 +84,13 @@ function computeGeom(ctx: DefinitionLayoutContext): TypeGeom {
   const bandScale = alongScale instanceof BandScale ? alongScale : null;
   const xCont = bandScale === null ? (alongScale as ContinuousScale | null) : null;
   if (!valueScale) return { pos: m.series.map(() => []), slices: null, bars: null };
+
+  /** Pixel along the DATA axis for a datum (band center or continuous scale). */
+  const alongPx = (xv: number | null, pi: number): number | null => {
+    if (bandScale) return bandScale.center(bandIndexFor(m, xv, pi));
+    if (xCont) return xv === null ? null : xCont.scale(xv);
+    return null;
+  };
 
   // ---- Bar slot geometry (band or linear x). Bars are laid out first.
   const barIdx = kindIndices(ctx, 'bar');
@@ -137,6 +153,18 @@ function computeGeom(ctx: DefinitionLayoutContext): TypeGeom {
       });
     }
 
+    // Range band: `y` = the HIGH edge, `y0` = the LOW edge, so the pipeline's
+    // generic animation opens the band from its low edge.
+    if (s.kind === 'rangearea') {
+      return s.points.map((p, pi): PointPos | null => {
+        const rg = rangeOf(p);
+        if (!rg) return null;
+        const x = alongPx(p.xv, pi);
+        if (x === null) return null;
+        return { x, y: valueScale.scale(rg.high), y0: valueScale.scale(rg.low) };
+      });
+    }
+
     // line / area / scatter marks (vertical only; horizontal forces bar kind).
     return s.points.map((p, pi): PointPos | null => {
       const yVal = s.y1 ? (s.y1[pi] ?? null) : p.y;
@@ -157,6 +185,52 @@ function computeGeom(ctx: DefinitionLayoutContext): TypeGeom {
   });
 
   return { pos, slices: null, bars };
+}
+
+/**
+ * Paint every visible series in the fixed combo z-order, dispatching each mark
+ * kind to its own module. The ONE place kind -> renderer mapping lives, so a
+ * cartesian root never re-implements it.
+ */
+export function renderKindsInZOrder(ctx: RenderContext): void {
+  for (const kind of KIND_Z_ORDER) {
+    const idx = kindIndices(ctx, kind);
+    if (idx.length === 0) continue;
+    if (kind === 'rangearea') renderRangeBandKind(ctx, idx);
+    else if (kind === 'area') renderAreaKind(ctx, idx);
+    else if (kind === 'bar') renderBarKind(ctx, idx);
+    else if (kind === 'line') renderLineKind(ctx, idx);
+    else renderScatterKind(ctx, idx);
+  }
+}
+
+/**
+ * Range-band hit: nearest datum by x, preferring a band whose low..high spans
+ * the pointer. A band has no marker to be "near", so it is tested after the
+ * marker-like kinds and after bar columns (it is the recessive layer).
+ */
+function rangeBandHit(ctx: GeomContext, px: number, py: number): HoverState | null {
+  let best: HoverState | null = null;
+  let bestScore = Infinity;
+  ctx.model.series.forEach((s, si) => {
+    if (!s.visible || s.kind !== 'rangearea') return;
+    const pts = ctx.geom.pos[si];
+    if (!pts) return;
+    pts.forEach((p, pi) => {
+      if (!p) return;
+      const dx = Math.abs(p.x - px);
+      if (dx > HIT_RADIUS) return;
+      const lo = Math.min(p.y, p.y0);
+      const hi = Math.max(p.y, p.y0);
+      const inside = py >= lo - 2 && py <= hi + 2;
+      const score = dx + (inside ? 0 : 10000);
+      if (score < bestScore) {
+        bestScore = score;
+        best = { si, pi };
+      }
+    });
+  });
+  return best;
 }
 
 /** Full-column band hit (bar spec) restricted to bar-kind series. */
@@ -244,25 +318,19 @@ export function makeCartesianDefinition(cfg: CartesianConfig): ChartTypeDefiniti
         }
       }
       // Combo z-order: areas < bars < lines < scatter.
-      for (const kind of KIND_Z_ORDER) {
-        const idx = kindIndices(ctx, kind);
-        if (idx.length === 0) continue;
-        if (kind === 'area') renderAreaKind(ctx, idx);
-        else if (kind === 'bar') renderBarKind(ctx, idx);
-        else if (kind === 'line') renderLineKind(ctx, idx);
-        else renderScatterKind(ctx, idx);
-      }
+      renderKindsInZOrder(ctx);
     },
 
     hitTest(ctx, px, py) {
       if (shared(ctx.opts)) return nearestByX(ctx.geom.pos, px);
-      // Marker-like kinds first (nearest within 24px), then bar columns.
+      // Marker-like kinds first (nearest within 24px), then bar columns, then
+      // range bands (a band has no marker, so it never steals a nearby point).
       const masked = ctx.model.series.map((s, si) =>
-        s.visible && s.kind !== 'bar' ? (ctx.geom.pos[si] ?? []) : [],
+        s.visible && s.kind !== 'bar' && s.kind !== 'rangearea' ? (ctx.geom.pos[si] ?? []) : [],
       );
       const hit = nearestPoint(masked, px, py);
       if (hit) return { si: hit.si, pi: hit.pi };
-      return barHit(ctx, px, py);
+      return barHit(ctx, px, py) ?? rangeBandHit(ctx, px, py);
     },
 
     legendItems(ctx): LegendItem[] {

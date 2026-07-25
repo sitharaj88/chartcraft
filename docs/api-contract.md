@@ -44,7 +44,13 @@ type ChartType =
   | 'line' | 'area' | 'bar' | 'scatter' | 'pie' | 'donut'
   // v0.2 (see "v0.2 chart types" section below for per-type specs)
   | 'bubble' | 'sparkline' | 'histogram' | 'boxplot' | 'candlestick' | 'ohlc'
-  | 'waterfall' | 'heatmap' | 'treemap' | 'sunburst' | 'funnel' | 'radar' | 'gauge';
+  | 'waterfall' | 'heatmap' | 'treemap' | 'sunburst' | 'funnel' | 'radar' | 'gauge'
+  // v0.3 (see "v0.3 chart types & features" section below)
+  | 'rangearea' | 'bullet' | 'dumbbell' | 'lollipop' | 'slope'
+  | 'streamgraph' | 'marimekko' | 'pyramid' | 'calendar'
+  | 'radialbar' | 'rose' | 'violin' | 'parallel'
+  | 'icicle' | 'circlepack' | 'wordcloud' | 'sankey' | 'gantt'
+  | 'choropleth' | 'network';
 
 interface ChartOptions {
   type: ChartType;
@@ -226,9 +232,10 @@ the registry and contains no per-type branching.
 ```ts
 interface SeriesOptions {
   // ... v0.1 fields ...
-  type?: 'line' | 'bar' | 'area' | 'scatter';  // COMBO: per-series override on cartesian
+  type?: SeriesKind;                           // COMBO: per-series override on cartesian
       // charts whose root type is line/area/bar/scatter. All series share ONE y-axis
       // (the one-axis rule is non-negotiable — no dual axes, ever).
+      // v0.2: 'line' | 'bar' | 'area' | 'scatter'. v0.3 adds 'rangearea' (see below).
   sizeRange?: [number, number];                // bubble only: min/max marker DIAMETER px
                                                // (value maps to AREA, never radius); default [8, 40]
 }
@@ -300,3 +307,280 @@ interface Theme {
 - **Tests:** every type ships unit tests for its layout math (bins, squarify,
   polar transforms, 5-number summaries, waterfall running totals…), legend
   policy, a11y table content, and a renderer call-log smoke test.
+
+---
+
+# v0.3 chart types & features
+
+Twenty new types (39 total) plus six cross-cutting features. Everything in
+this section obeys the v0.2 "Cross-cutting requirements" verbatim — a type
+that skips keyboard navigation, an aria table, theming, or tests is not done.
+
+## Additions to existing interfaces
+
+```ts
+interface SeriesOptions {
+  // ... v0.1/v0.2 fields ...
+  data: SeriesData;                 // widened: see SeriesData below
+  errorBars?: ErrorBarOptions;      // decoration on line/area/bar/scatter/bubble
+  trendline?: TrendlineOptions;     // decoration on line/scatter/bubble
+  lowKey?: string; highKey?: string; // rangearea: field names when using object data (default 'low'/'high')
+}
+
+// A range band is a real MARK KIND, so `SeriesOptions.type: 'rangearea'` is a
+// legal per-series combo override on any cartesian root — the canonical
+// forecast chart (a confidence band plus a line of the same color) is one
+// chart, one y-axis. Bands paint first: rangearea < area < bar < line < scatter.
+type SeriesKind = 'line' | 'bar' | 'area' | 'scatter' | 'rangearea';
+
+// What a series carries: a list of data values, or — for `sankey` / `network`,
+// whose whole series IS the graph — the node/link payload the per-type specs
+// describe. Both forms typecheck; neither needs a cast.
+type SeriesData = DataValue[] | GraphData;
+interface GraphData {
+  nodes: readonly { id?: string; label?: string; color?: string; group?: string; value?: number }[];
+  links: readonly { source: string | number; target: string | number; value?: number;
+                    label?: string; color?: string }[];
+}
+
+interface DataPoint {
+  // ... v0.2 fields ...
+  value?: number;                              // TreeNode value (hierarchy types); falls back to y
+  low?: number | null; high?: number | null;   // rangearea / bullet range / gantt span
+  eLow?: number; eHigh?: number;               // asymmetric error bar bounds (absolute values)
+  target?: number;                             // bullet: target marker
+  start?: number | Date; end?: number | Date;  // gantt: task span
+  group?: string;                              // gantt swimlane / network cluster / parallel class
+  weight?: number;                             // wordcloud term weight (alias of y)
+  id?: string;                                 // network node id, sankey node id
+}
+
+interface ChartOptions {
+  // ... v0.1/v0.2 fields ...
+  dataLabels?: DataLabelOptions | boolean;     // default false; see Data labels
+  annotations?: Annotation[];                  // reference lines/bands/points/text
+  zoom?: ZoomOptions | boolean;                // default false; see Zoom, pan & brush
+  // per-type blocks
+  rangearea?: { showBounds?: boolean };        // hairline edges on the band, default true
+  bullet?: { ranges?: number[]; target?: number };  // qualitative range boundaries (ascending)
+  calendar?: { start?: Date | number; end?: Date | number; weekStart?: 0 | 1; ramp?: string[] };
+  violin?: { bandwidth?: number | 'auto'; showBox?: boolean };  // KDE bandwidth; box overlay default true
+  radialbar?: { innerRadius?: number; maxValue?: number; track?: boolean };  // innerRadius 0..1 of outer, default 0.3
+  rose?: { startAngle?: number };
+  sankey?: { nodeWidth?: number; nodePadding?: number; align?: 'left' | 'right' | 'justify' };
+  gantt?: { rowHeight?: number; today?: Date | number };
+  wordcloud?: { minFontSize?: number; maxFontSize?: number; rotate?: boolean };
+  network?: { linkDistance?: number; charge?: number; iterations?: number; fixedSeed?: number };
+  choropleth?: {
+    geojson: GeoFeatureCollection;             // REQUIRED — caller supplies topology (never bundled)
+    projection?: 'mercator' | 'equirectangular' | 'albersUsa' | 'orthographic';
+    featureKey?: string;                       // GeoJSON property matched against data labels; default 'name'
+    ramp?: string[]; min?: number; max?: number;
+    unmatched?: 'warn' | 'strict' | 'omit';    // data row matching NO feature; default 'warn'
+  };
+  parallel?: { axes?: string[] };              // dimension order; default = data key order
+}
+
+interface ErrorBarOptions {
+  // Absolute bounds per point (eLow/eHigh) win; otherwise a uniform value/percent.
+  value?: number; percent?: number;
+  capWidth?: number;                           // px, default 6
+  color?: string;                              // default: the series color darkened, else textSecondary
+}
+interface TrendlineOptions {
+  type?: 'linear' | 'movingAverage' | 'exponential';  // default 'linear'
+  period?: number;                             // movingAverage window, default 7
+  color?: string;                              // default: series color
+  dashed?: boolean;                            // default true — a trendline must never read as data
+  label?: string | false;                      // legend entry; default the series name + " trend"
+}
+interface DataLabelOptions {
+  show?: boolean;
+  format?: (point: TooltipPoint) => string;
+  // Selectivity is mandatory: 'all' is legal but 'auto' (default) labels only
+  // extremes/endpoints and drops labels that would collide.
+  select?: 'auto' | 'all' | 'extremes' | 'endpoints' | 'last';
+  position?: 'outside' | 'inside' | 'auto';    // default 'auto'
+}
+type Annotation =
+  | { kind: 'line'; axis: 'x' | 'y'; value: number | Date; label?: string; color?: string; dashed?: boolean }
+  | { kind: 'band'; axis: 'x' | 'y'; from: number | Date; to: number | Date; label?: string; color?: string }
+  | { kind: 'point'; x: number | Date | string; y: number; label: string; color?: string }
+  | { kind: 'text'; x: number | Date | string; y: number; text: string; color?: string };
+interface ZoomOptions {
+  enabled?: boolean;
+  axis?: 'x' | 'y' | 'xy';                     // default 'x'
+  wheel?: boolean;                             // ctrl/⌘+wheel zoom, default true
+  drag?: boolean;                              // drag a brush region to zoom, default true
+  pan?: boolean;                               // drag to pan once zoomed, default true
+  minSpan?: number;                            // smallest zoomable x-span in data units
+}
+interface GeoFeatureCollection { type: 'FeatureCollection'; features: unknown[] }
+```
+
+## New `Chart` methods
+
+```ts
+interface Chart {
+  // ... v0.1 methods ...
+  exportImage(opts?: { format?: 'png' | 'svg'; scale?: number; background?: string }): Promise<Blob>;
+  exportData(opts?: { format?: 'csv' | 'json' }): string;   // mirrors the a11y table
+  zoomTo(range: { x?: [number, number]; y?: [number, number] } | null): void;  // null resets
+}
+```
+
+## Per-type specification
+
+| Type | Data shape | Rendering & rules |
+|---|---|---|
+| `rangearea` | `{x, low, high}` or `[x, low, high]` | Filled band low→high at 0.18 alpha in the series color; hairline edges per `rangearea.showBounds`. Pairs with a `line` series of the same color for forecast/CI charts (combo). Tooltip lists low & high. |
+| `bullet` | one series, `{x: label, y: value, target?}`; ranges from `bullet.ranges` | Horizontal rows: qualitative ranges as nested grey steps (lightness ramp, never hues), the measure a thin dark bar centered in the row, the target a 2px perpendicular tick. Legend hidden — rows are labeled. |
+| `dumbbell` | per category two values: `{x, low, high}` | Hairline connector between two ≥10px dots (slots 1 & 2 or series colors); category axis band. Legend = the two endpoint names. |
+| `lollipop` | like `bar` | 1px stem from baseline + ≥10px terminal dot. Same layout/stacking rules as bar minus stacking (unsupported — error if `stacked`). |
+| `slope` | `categories` = 2+ ordered stages; one point per stage per series | Straight lines between stage columns, ≥8px endpoint dots, direct series labels at both ends (no legend when labels fit), colors by series identity. Rank changes must be readable — no smoothing. |
+| `streamgraph` | like stacked `area` | Stacked area with an "inside-out" (wiggle-minimizing) baseline offset; no y-axis ticks (the baseline is meaningless) — y-axis labels suppressed, values live in tooltip + table. |
+| `marimekko` | series with `{x: column, y: value}` + per-column width from series `data[i].r` or a `widths` categories parallel | Variable-width 100%-stacked columns: column width ∝ column total, segment height ∝ share. 2px surface gaps. Both dimensions in the tooltip and table. |
+| `pyramid` | exactly 2 series (e.g. male/female) over shared `categories` | Mirrored horizontal bars around a centered category axis; x-axis shows absolute magnitude on both arms. Legend = the 2 series. |
+| `calendar` | one series, `{x: Date, y: value}` | Day cells laid out in week columns, month boundaries hairline-separated, weekday labels in `textMuted`; color from `calendar.ramp` (default sequentialPalette). Keyboard walks days; table = date + value. |
+| `radialbar` | `categories` + one value each (or series) | Concentric arcs from `radialbar.innerRadius` outward, each track optionally shown at gridline color; value arcs in categorical slots; direct labels at arc starts. `maxValue` default = data max. |
+| `rose` | `categories` = sectors, values ≥ 0 | Nightingale rose: equal-angle sectors, **radius ∝ √value** (area-true — never radius ∝ value), 2px gaps, sector labels around the perimeter. |
+| `violin` | per category raw `number[]` | Gaussian-KDE density mirrored around each category axis (Silverman bandwidth for `'auto'`), 0.35-alpha fill + 1px outline, optional inner box plot per `violin.showBox`. Table = the 5-number summary + n. |
+| `parallel` | series = lines; `data` = one value per dimension, dimensions named by `parallel.axes` or `categories` | One vertical axis per dimension (each independently scaled, labeled top and bottom), polylines across them at 0.7 alpha, 2px on hover/focus. **Axis brushing (drag on an axis to filter lines) is NOT in v0.3** — the layout exposes a documented seam for it (`ParallelFrame`, `parallelAxisAtX`, `parallelYToValue`) and it is on the roadmap. |
+| `icicle` | `TreeNode[]` (as treemap) | Rectangular partition: depth = row, width ∝ value; same palette rules as treemap (top-level slots, children lightness steps); direct labels when they fit. |
+| `circlepack` | `TreeNode[]` | Enclosing-circle packing (Welzl-style enclosure), leaves filled, parents outlined hairline; same palette rules; labels on leaves that fit. |
+| `wordcloud` | one series, `{x: term, y: weight}` | Spiral placement with collision avoidance, font size interpolated `minFontSize..maxFontSize` by weight, optional 90° rotation per `wordcloud.rotate`; colors cycle the categorical slots **in order by rank**, text is the mark here (the one place text wears series color). Deterministic layout (seeded) — no `Math.random`. |
+| `sankey` | `data: { nodes: {id, label, color?}[]; links: {source, target, value}[] }` on the first series | Layered node/link layout (longest-path layering, iterative crossing reduction), node bars in categorical slots, links as cubic ribbons at 0.45 alpha colored by source, 2px node gaps. Keyboard walks nodes then their links. Cycles rejected with a clear error. |
+| `gantt` | one series per swimlane or `group` per point; `{x: label, start, end, group?}` | Horizontal task bars on a time x-axis, rows = tasks (or grouped by `group`), 4px rounded ends, optional `gantt.today` marker (2px dashed). Table = task, start, end, duration. |
+| `choropleth` | one series, `{x: featureName, y: value}`; topology via `choropleth.geojson` | Project features per `choropleth.projection`, fit to plot; fill from the sequential ramp; features with no datum get `theme.gridline` fill; borders hairline `theme.axisLine`. Gradient scale legend (the heatmap legend hook). Keyboard walks features in data order. GeoJSON is caller-supplied — **never bundled**. A data row matching NO feature follows `choropleth.unmatched` (below). |
+| `network` | `data: { nodes: {id, label, group?, value?}[]; links: {source, target, value?}[] }` | Deterministic force layout (seeded, fixed iteration count — `network.fixedSeed` default 1; no `Math.random`, no animation loop: simulate then draw), node radius ∝ √value, node color by `group` (categorical slots), links hairline at 0.35 alpha. Keyboard walks nodes by degree; table = node, group, degree, value. |
+
+## Feature specification
+
+1. **Error bars** — `SeriesOptions.errorBars` on line/area/bar/scatter/bubble.
+   Vertical whiskers with `capWidth` caps, 1px, drawn above marks. Included in
+   the y-domain. A11y table gains ± columns; tooltip shows the interval.
+2. **Trendlines** — `SeriesOptions.trendline`. Computed in a pure, tested
+   function (least-squares for `'linear'`, centered window for
+   `'movingAverage'`, `y = ae^{bx}` for `'exponential'`). Dashed by default and
+   labeled in the legend so it can never be mistaken for observed data.
+   Excluded from the y-domain by default.
+3. **Data labels** — `dataLabels`. `'auto'` (the default when enabled) labels
+   endpoints/extremes only and **drops any label that would collide** with
+   another label or the plot edge; measured, not guessed. Labels wear ink
+   colors, not series colors.
+4. **Annotations** — `annotations[]`: reference lines, bands, labeled points,
+   free text. Drawn beneath marks (bands) or above (lines/points), clipped to
+   the plot, labels in `textSecondary` with a surface halo for legibility.
+   Included in the a11y description; not in the data table.
+5. **Zoom, pan & brush** — `zoom`. Drag draws a brush rectangle (surface-tinted,
+   hairline edge) and zooms on release; ctrl/⌘+wheel zooms about the pointer;
+   drag pans when zoomed; double-click and `Escape` reset. Keyboard: `+`/`-`
+   zoom, arrows pan when zoomed. `zoomTo()` is the programmatic path and emits
+   a `zoom` event `{ x?: [number, number]; y?: [number, number] } | null`.
+   Downsampling re-runs against the visible window, so zooming into 1M points
+   reveals real detail.
+6. **Export** — `exportImage()` renders at `scale` (default 2) onto an
+   offscreen surface and resolves a `Blob`; `'svg'` re-renders through the SVG
+   renderer path if available, else rejects with a clear error. `exportData()`
+   emits exactly the a11y table's contents as CSV/JSON.
+
+## New `ChartEventMap` entries
+
+```ts
+zoom: { x?: [number, number]; y?: [number, number] } | null;  // null = reset
+annotationclick: { index: number; annotation: Annotation };
+```
+
+## Choropleth: unmatched data rows
+
+Real-world GeoJSON name mismatches ("USA" vs "United States of America") are the
+norm, so a data row whose label matches no map feature is **loud but not fatal**
+by default. `choropleth.unmatched` picks the policy:
+
+| value | behavior |
+|---|---|
+| `'warn'` (default) | The row is not shaded, and it is REPORTED: one structured `console.warn` naming the unmatched labels, the `featureKey` used and the feature count, plus a sentence in the chart's accessible description ("2 data rows could not be placed on the map: …"). The rows keep their a11y table entries, so `exportData()` still carries every datum. Warned once per distinct diagnostic, not once per frame. |
+| `'strict'` | Throws, with the same message the warning uses. For CI and data pipelines, where a typo'd region must fail the build rather than ship a plausible-looking map. |
+| `'omit'` | Silent. For deliberately partial datasets. |
+
+Features with no datum are unaffected by this option: they are always filled
+`theme.gridline` and listed in the a11y table as `no data`.
+
+---
+
+# Extensibility: the decorator API
+
+`@chartcraft/core` exports a plugin surface for **type-agnostic overlay passes**:
+
+```ts
+export { registerDecorator, unregisterDecorator, decorators, clearDecorators } from '@chartcraft/core';
+export type { Decorator, DecoratorContext, DecoratorHost, DecorationLayer, Viewport };
+```
+
+A `Decorator` is a pass the pipeline walks for every mounted chart. The five
+cross-cutting v0.3 features (error bars, trendlines, data labels, annotations,
+zoom/pan/brush) are implemented as decorators and get no special treatment: a
+chart type never knows any of them exist, and nothing is registered by default.
+
+```ts
+interface Decorator {
+  readonly id: string;                  // stable; re-registering an id REPLACES it
+  readonly layer: 'under' | 'over';     // beneath or above the type's marks
+  readonly order?: number;              // ascending within a layer; ties keep reg. order
+  appliesTo?(ctx): boolean;             // cheap opt-out
+  draw(ctx): void;                      // paint through ctx.r, never the canvas API
+  extendYDomain?(model, opts): [number, number] | null;
+  legendItems?(ctx): LegendItem[];
+  a11yTable?(ctx, spec): A11yTableSpec;
+  tooltipPoints?(ctx, hit, points): TooltipPoint[];
+  a11yDescription?(ctx): string | null;
+  onClick?(ctx, px, py, native): boolean;
+  attach?(host): (() => void) | void;
+}
+```
+
+| hook | when | semantics |
+|---|---|---|
+| `draw` | once per frame, in the decorator's layer | Clip to `ctx.plot` yourself when the feature must not bleed into the margins. |
+| `appliesTo` | before `draw`, `legendItems`, `onClick`, `a11yTable`, `tooltipPoints`, `a11yDescription` | Return false to skip this chart entirely. |
+| `extendYDomain` | while the MODEL is built, before scales exist | The pipeline **unions** the result with the data extent; it never narrows. Error-bar whiskers land inside the value domain this way. |
+| `legendItems` | when the legend is built | Appended **after** the type's items (a trendline must be legend-labeled so it can never read as observed data). Skipped when the type supplies a `legendCustomEl`. |
+| `a11yTable` | between the type's `a11yTable` stage and BOTH the DOM table and `exportData()` | There is exactly ONE table spec, so the DOM table and the CSV/JSON export can never disagree. |
+| `tooltipPoints` | after the type's `tooltipPoints`, BEFORE `tooltip.format` | Enrich values without wrapping the caller's formatter or mutating resolved options. |
+| `a11yDescription` | when the description node is synced | Concatenated with `a11y.description` and the chart type's own description into ONE visually-hidden node and ONE `aria-describedby` token. |
+| `onClick` | before datum hit-testing, topmost-registered first | Return true to consume the click, suppressing `pointclick`. |
+| `attach` | once per chart instance, on mount | The returned function runs on `destroy`. **The only sanctioned place for DOM listeners.** `DecoratorHost` exposes `canvas`, `root`, `el`, `context()`, `requestRender()`, `setViewport()`, `getViewport()`, `emit()`; its identity is stable for the chart's lifetime, so keying per-chart state on it is safe. |
+
+`DecoratorContext` is read-only and carries `r` (the `Renderer`), `theme`,
+`opts`, `model`, `layout`, `plot`, `xScale`, `yScale`, `geom` (this frame's
+animation-interpolated geometry), `hover`, `def`, `viewport`, `emit`, and
+`host`.
+
+**`host` is null on the export path.** `exportImage()` paints through an
+offscreen renderer and hands decorators a context whose `host` is `null`, so an
+export can never reach the live DOM. Treat a null host as "draw only, touch
+nothing".
+
+**Stability.** This surface is **experimental** in v0.3 and may change in a
+minor release. It is exported because the five built-in features are built on it
+and the seams should be usable, not because the shape is settled: the four hooks
+above `onClick` were added during v0.3 in response to real feature needs, and
+more may follow. `registerDecorator` / `unregisterDecorator` / `decorators` /
+`clearDecorators` and the `Decorator` shape are what may move; nothing a
+decorator can do is reachable any other way, so pin your core version if you
+ship one.
+
+---
+
+## Non-negotiables restated for v0.3
+
+- **No dual axes, ever** — this includes Pareto charts. A cumulative line
+  belongs on the same normalized scale as its bars, or in a small multiple.
+- **Area-true encodings**: rose radius ∝ √value, bubble/network radius ∝
+  √value. Radius-linear encoding is a bug, not a style choice.
+- **No `Math.random()` in layout** — wordcloud, network and any other
+  stochastic layout must be seeded and deterministic, so renders are
+  reproducible and testable.
+- **Hierarchy coloring never invents hues** — children are lightness steps of
+  the parent's slot.
+- **Trendlines and annotations must be visually distinguishable from data.**

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { PointEvent } from '../src/index';
 import { lightTheme } from '../src/index';
 import { registerStatisticalChartTypes } from '../src/charts/statistical';
+import { ohlcValueDomain } from '../src/charts/statistical/financial';
 import { cleanupDom, ctxOf, key, mount } from './helpers';
 
 registerStatisticalChartTypes();
@@ -74,11 +75,12 @@ describe('ohlc — rendering', () => {
 });
 
 describe('ohlc — shared financial behavior', () => {
-  it('y domain covers the niced l..h extent', () => {
+  it('y domain covers the niced l..h extent (via the extendValueDomain stage)', () => {
     const { chart } = mount({ type: 'ohlc', data });
-    const o = chart.getOptions();
-    expect(o.yAxis!.min).toBe(95);
-    expect(o.yAxis!.max).toBe(115);
+    // Supplied by the pipeline stage; the caller's `yAxis` is left alone.
+    expect(chart.getOptions().yAxis!.min).toBeUndefined();
+    expect(chart.getOptions().yAxis!.max).toBeUndefined();
+    expect(ohlcValueDomain(data)).toEqual([95, 115]);
   });
 
   it('appears instantly (animation force-disabled)', () => {

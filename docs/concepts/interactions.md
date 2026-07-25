@@ -122,6 +122,62 @@ createChart(el, {
 });
 ```
 
+## Zoom, pan and brush
+
+Off by default; `zoom: true` (or a [`ZoomOptions`](../api/core.md#zoomoptions)
+object) turns it on for **continuous** axes:
+
+```ts
+createChart(el, {
+  type: 'line',
+  data,
+  xAxis: { type: 'time' },
+  zoom: { enabled: true, axis: 'x', minSpan: 60_000 },
+});
+```
+
+| Input | Action |
+|---|---|
+| Drag (unzoomed) | Brush a region, zoom on release |
+| Drag (zoomed) | Pan; `Shift`+drag brushes instead |
+| ctrl/⌘ + wheel | Zoom about the pointer |
+| Double-click | Reset |
+| `Escape` | Reset when zoomed; otherwise clears datum focus |
+| `+` / `-` | Zoom in / out about the window center |
+| `Shift` + arrows | Pan by 10% of the visible span |
+
+`chart.zoomTo(range)` is the programmatic path and `null` resets; the
+[`zoom` event](#event-notes) reports every completed gesture. Band (category)
+axes ignore the viewport entirely — windowing a band scale would desynchronize
+band indices from `categories`, which tick labels, hit-testing and the data table
+all address by index.
+
+### Why plain arrow keys never pan
+
+v0.1 binds the arrow keys to keyboard **point navigation**, and v0.3 needed "pan
+when zoomed". Accessibility wins that conflict, deliberately:
+
+- **plain `←` `→` `↑` `↓` always navigate points**, zoomed or not, and are never
+  intercepted;
+- **`Shift`+arrow pans** — and only when zoom is enabled, a viewport is active,
+  `pan` is on, and that arrow's axis is actually zoomable. Otherwise the key
+  falls through untouched;
+- **`Escape` is two-stage:** it resets the zoom when zoomed, and otherwise falls
+  through to clear the focused datum.
+
+Claimed keys are intercepted in the **capture phase** on the chart root, so the
+canvas's own handler never sees them and focus can never move behind a pan.
+Everything else reaches the canvas exactly as before. Full behavior:
+[Zoom, pan & brush](../features/zoom-pan-brush.md).
+
+## Annotations are clickable
+
+When [annotations](../features/annotations.md) are present they are hit-tested
+**before** data points and **consume** the click — `annotationclick` fires and no
+`pointclick` follows. Tolerances: 4px around a reference line, 8px around a point
+dot, the measured text box for text, the rectangle for a band; marks beat bands
+and later entries beat earlier ones.
+
 ## The events API
 
 Try it live — click a point (or `Tab` to the chart and press `Enter`) and
@@ -139,6 +195,9 @@ interface ChartEventMap {
   legendtoggle: { seriesId: string; visible: boolean };
   render: { reason: 'init' | 'update' | 'resize' | 'toggle' };
   destroy: Record<string, never>;
+  // v0.3
+  zoom: { x?: [number, number]; y?: [number, number] } | null;   // null = reset
+  annotationclick: { index: number; annotation: Annotation };
 }
 
 interface PointEvent {
@@ -195,6 +254,15 @@ your own references at the natural scope boundary is still good hygiene.
   both origins if you position UI from the event.
 - `render` fires after each committed render with the `reason`; useful for
   synchronizing overlays or measuring.
+- `zoom` fires **once per completed gesture** — a pan writes the viewport
+  silently while you drag and emits on release — and only when the window
+  actually changed. Zooming all the way out emits `null`, because any axis
+  spanning its full data bounds is dropped from the viewport.
+- `annotationclick` consumes the click, so no `pointclick` follows it.
+- `dataIndex` is the type's natural **mark** index, which is not always a data
+  index: a bin for a histogram, a depth-first node for hierarchies, a rank for
+  wordcloud and network, a row for bullet and gantt. See the caveat under
+  [`PointEvent`](../api/core.md#pointevent).
 - `destroy` fires once, last. No events fire after it.
 - Handlers run synchronously; keep them cheap (especially `pointenter` during
   pointer moves) or debounce your side effects.

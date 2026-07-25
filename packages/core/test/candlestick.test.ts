@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { PointEvent } from '../src/index';
 import { lightTheme } from '../src/index';
 import { registerStatisticalChartTypes } from '../src/charts/statistical';
-import { candleColor, computeSlotWidth, ohlcExtent } from '../src/charts/statistical/financial';
+import { candleColor, computeSlotWidth, ohlcExtent, ohlcValueDomain } from '../src/charts/statistical/financial';
 import { cleanupDom, ctxOf, key, mount, paintedText } from './helpers';
 
 registerStatisticalChartTypes();
@@ -63,11 +63,15 @@ describe('candlestick — layout math', () => {
     expect(ohlcExtent(objects)).toEqual([95, 112]);
   });
 
-  it('resolveOptions installs the niced l..h extent as the y domain', () => {
+  it('the extendValueDomain stage installs the niced l..h extent', () => {
+    // v0.3: the domain is supplied by the pipeline's `extendValueDomain` stage
+    // instead of being written into the caller's `yAxis`, so `getOptions()`
+    // reports configuration and never a computed domain.
     const { chart } = mount({ type: 'candlestick', data: tuples });
-    const o = chart.getOptions();
-    expect(o.yAxis!.min).toBe(95); // 95..112 niced at 5 ticks (step 5)
-    expect(o.yAxis!.max).toBe(115);
+    expect(chart.getOptions().yAxis!.min).toBeUndefined();
+    expect(chart.getOptions().yAxis!.max).toBeUndefined();
+    expect(ohlcValueDomain(tuples)).toEqual([95, 115]); // 95..112 niced at 5 ticks
+    expect(ohlcValueDomain({ series: [] })).toBeNull();
   });
 });
 

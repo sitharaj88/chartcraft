@@ -1,7 +1,7 @@
 {
   "name": "@chartcraft/core",
   "version": "0.2.0",
-  "description": "ChartCraft core — framework-agnostic charting engine (zero dependencies)",
+  "description": "ChartCraft core \u2014 framework-agnostic charting engine (zero dependencies)",
   "license": "MIT",
   "sideEffects": false,
   "main": "./dist/index.js",
@@ -22,7 +22,7 @@
     "build": "tsup",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "bench": "tsup bench/points.ts --format cjs --out-dir bench/dist --silent && node bench/dist/points.js"
+    "bench": "tsup bench/index.ts --format cjs --out-dir bench/dist --external jsdom --silent && node --expose-gc bench/dist/index.js"
   },
   "keywords": [
     "chart",

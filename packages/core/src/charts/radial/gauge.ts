@@ -233,6 +233,20 @@ export const gaugeDefinition: ChartTypeDefinition = {
     };
   },
 
+  /**
+   * A gauge is ONE number. "1 series and 1 point" is the least useful thing an
+   * accessible name could say about it — the name carries the reading.
+   */
+  a11ySummary(ctx): string | null {
+    const m = ctx.model;
+    const { min, max } = gaugeRange(ctx.opts.gauge);
+    const s = m.series.find((sr) => sr.visible && sr.points.length > 0) ?? m.series[0];
+    const value = s?.points[0]?.y ?? null;
+    if (value === null) return `${s?.name ?? 'value'} has no value, range ${formatValue(min)} to ${formatValue(max)}`;
+    const pct = max > min ? ` (${Math.round(((value - min) / (max - min)) * 100)}% of the range)` : '';
+    return `${s?.name ?? 'value'} is ${formatValue(value)} of ${formatValue(min)} to ${formatValue(max)}${pct}`;
+  },
+
   keyboardNav(model) {
     // A single focusable datum: the value.
     const si = model.series.findIndex((s) => s.visible && s.points.length > 0);

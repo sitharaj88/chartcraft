@@ -25,6 +25,34 @@ import DemoRadar from './components/DemoRadar.vue';
 import DemoGauge from './components/DemoGauge.vue';
 import DemoSparklineRow from './components/DemoSparklineRow.vue';
 import DemoCombo from './components/DemoCombo.vue';
+// v0.3 chart types
+import DemoRangearea from './components/DemoRangearea.vue';
+import DemoBullet from './components/DemoBullet.vue';
+import DemoDumbbell from './components/DemoDumbbell.vue';
+import DemoLollipop from './components/DemoLollipop.vue';
+import DemoSlope from './components/DemoSlope.vue';
+import DemoStreamgraph from './components/DemoStreamgraph.vue';
+import DemoMarimekko from './components/DemoMarimekko.vue';
+import DemoPyramid from './components/DemoPyramid.vue';
+import DemoCalendar from './components/DemoCalendar.vue';
+import DemoRadialbar from './components/DemoRadialbar.vue';
+import DemoRose from './components/DemoRose.vue';
+import DemoViolin from './components/DemoViolin.vue';
+import DemoParallel from './components/DemoParallel.vue';
+import DemoIcicle from './components/DemoIcicle.vue';
+import DemoCirclepack from './components/DemoCirclepack.vue';
+import DemoWordcloud from './components/DemoWordcloud.vue';
+import DemoSankey from './components/DemoSankey.vue';
+import DemoGantt from './components/DemoGantt.vue';
+import DemoChoropleth from './components/DemoChoropleth.vue';
+import DemoNetwork from './components/DemoNetwork.vue';
+// v0.3 cross-cutting features
+import DemoErrorBars from './components/DemoErrorBars.vue';
+import DemoTrendlines from './components/DemoTrendlines.vue';
+import DemoDataLabels from './components/DemoDataLabels.vue';
+import DemoAnnotations from './components/DemoAnnotations.vue';
+import DemoZoom from './components/DemoZoom.vue';
+import DemoExport from './components/DemoExport.vue';
 
 import './custom.css';
 
@@ -55,5 +83,33 @@ export default {
     app.component('DemoGauge', DemoGauge);
     app.component('DemoSparklineRow', DemoSparklineRow);
     app.component('DemoCombo', DemoCombo);
+    // v0.3 chart types
+    app.component('DemoRangearea', DemoRangearea);
+    app.component('DemoBullet', DemoBullet);
+    app.component('DemoDumbbell', DemoDumbbell);
+    app.component('DemoLollipop', DemoLollipop);
+    app.component('DemoSlope', DemoSlope);
+    app.component('DemoStreamgraph', DemoStreamgraph);
+    app.component('DemoMarimekko', DemoMarimekko);
+    app.component('DemoPyramid', DemoPyramid);
+    app.component('DemoCalendar', DemoCalendar);
+    app.component('DemoRadialbar', DemoRadialbar);
+    app.component('DemoRose', DemoRose);
+    app.component('DemoViolin', DemoViolin);
+    app.component('DemoParallel', DemoParallel);
+    app.component('DemoIcicle', DemoIcicle);
+    app.component('DemoCirclepack', DemoCirclepack);
+    app.component('DemoWordcloud', DemoWordcloud);
+    app.component('DemoSankey', DemoSankey);
+    app.component('DemoGantt', DemoGantt);
+    app.component('DemoChoropleth', DemoChoropleth);
+    app.component('DemoNetwork', DemoNetwork);
+    // v0.3 cross-cutting features
+    app.component('DemoErrorBars', DemoErrorBars);
+    app.component('DemoTrendlines', DemoTrendlines);
+    app.component('DemoDataLabels', DemoDataLabels);
+    app.component('DemoAnnotations', DemoAnnotations);
+    app.component('DemoZoom', DemoZoom);
+    app.component('DemoExport', DemoExport);
   },
 } satisfies Theme;

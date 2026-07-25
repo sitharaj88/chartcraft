@@ -12,6 +12,7 @@
  * instantly regardless of reduced-motion state.
  */
 import type { ChartData, ChartType, DataPoint, TooltipPoint, Theme } from '../../types';
+import { dataValuesOf } from '../../data/normalize';
 import type { ChartTypeDefinition } from '../registry';
 import type { ContinuousScale, HoverState, PointPos, RenderContext, TypeGeom } from '../../layout';
 import type { A11yTableSpec } from '../../a11y';
@@ -70,7 +71,7 @@ export function ohlcExtent(data: ChartData): [number, number] | null {
   let hi = -Infinity;
   for (const s of data.series) {
     if (s.visible === false) continue;
-    for (const d of s.data) {
+    for (const d of dataValuesOf(s.data)) {
       let h: number | undefined;
       let l: number | undefined;
       if (Array.isArray(d) && d.length >= 5) {
@@ -88,26 +89,39 @@ export function ohlcExtent(data: ChartData): [number, number] | null {
   return Number.isFinite(lo) && Number.isFinite(hi) ? [lo, hi] : null;
 }
 
+/**
+ * Value domain covering every raw high/low, `nice()`d; null when no entry is a
+ * usable OHLC shape. Pure, so it is unit-testable without mounting a chart.
+ */
+export function ohlcValueDomain(data: ChartData): [number, number] | null {
+  const ext = ohlcExtent(data);
+  if (!ext) return null;
+  let [lo, hi] = ext;
+  if (lo === hi) {
+    lo -= 1;
+    hi += 1;
+  }
+  const nice = new LinearScale([lo, hi]).nice(5).domain();
+  return [nice[0], nice[1]];
+}
+
 export function makeFinancialDefinition(id: 'candlestick' | 'ohlc'): ChartTypeDefinition {
   return {
     id: id as ChartType,
     needs: { cartesianAxes: true, xScale: 'auto' },
 
-    resolveOptions(resolved, raw) {
+    resolveOptions(resolved) {
       // Contract: candlestick/ohlc are never animated — marks appear instantly.
       resolved.animation = { ...resolved.animation, enabled: false };
-      const ext = ohlcExtent(resolved.data);
-      if (!ext) return;
-      let [lo, hi] = ext;
-      if (lo === hi) {
-        lo -= 1;
-        hi += 1;
-      }
-      const nice = new LinearScale([lo, hi]).nice(5).domain();
-      const rawY = typeof raw.yAxis === 'object' && raw.yAxis !== null ? raw.yAxis : {};
-      resolved.yAxis = { ...resolved.yAxis };
-      if (typeof rawY.min !== 'number') resolved.yAxis.min = nice[0];
-      if (typeof rawY.max !== 'number') resolved.yAxis.max = nice[1];
+    },
+
+    /**
+     * The value axis must span every high and low, which live in raw OHLC
+     * entries the generic value extent cannot read (`y` is only the close).
+     * Pipeline stage — the caller's `yAxis` stays the caller's.
+     */
+    extendValueDomain(_model, opts) {
+      return ohlcValueDomain(opts.data);
     },
 
     layout(ctx): TypeGeom {

@@ -5,24 +5,60 @@ ordered; the [API contract](api-contract.md) governs every addition — each of
 these lands as a contract change first, then core, then wrappers, then docs
 (see `CONTRIBUTING.md` in the repository root).
 
+## Shipped in 0.3
+
+**Twenty new chart types, for 39 total:** range area, bullet, dumbbell,
+lollipop, slope, streamgraph, marimekko, pyramid, calendar, radial bar, rose,
+violin, parallel coordinates, icicle, circle packing, word cloud, sankey,
+gantt, choropleth and network. Every one ships with the full shared feature set
+— tooltip, legend policy, keyboard navigation, a data table, theming, animation,
+reduced motion, resize — and its own [example page](examples/index.md) with an
+honest "when *not* to use this" section.
+
+**Six cross-cutting features**, each with a page of its own:
+
+- [Error bars](features/error-bars.md) — the v0.2 roadmap's one open chart-type
+  item, now a series decoration on line/area/bar/scatter/bubble, included in the
+  value domain, the tooltip and the data table.
+- [Trendlines](features/trendlines.md) — least squares, centered moving average,
+  exponential; dashed and legend-labeled so a fit can never read as data.
+- [Data labels](features/data-labels.md) — with *measured* selectivity: `'auto'`
+  drops labels that would collide.
+- [Annotations](features/annotations.md) — reference lines, bands, labeled points,
+  free text, plus an `annotationclick` event.
+- [Zoom, pan & brush](features/zoom-pan-brush.md) — and downsampling that re-runs
+  inside the visible window, so zooming into a million points reveals real detail.
+- [Export](features/export.md) — `exportImage()` (PNG at any scale) and
+  `exportData()` (CSV/JSON that mirrors the accessibility table exactly).
+
+**A public plugin surface.** The previous roadmap's "plugin system" shipped as the
+[decorator API](extensibility.md): the five features above are implemented on it
+with no special treatment from the pipeline. It is exported and documented but
+marked **experimental** — four of its hooks were added during v0.3 in response to
+real feature needs, so the shape may still move in a minor release.
+
+Also new: `SeriesData`/`GraphData` (graph payloads typecheck without a cast),
+`DataPoint.value` (so a real `TreeNode[]` needs no cast either), the `zoom` and
+`annotationclick` events, and three new `Chart` methods.
+
 ## Shipped in 0.2
 
-The chart-type items from the original roadmap landed in v0.2 — thirteen new
-types plus combo (per-series mark mixing), for 19 total: bubble, sparkline,
-histogram, boxplot, candlestick, OHLC, waterfall, heatmap, treemap, sunburst,
-funnel, radar, and gauge. As promised, every one shipped with palette slots
-by identity, a data-table representation, and full keyboard navigation — and
-the financial types got their volume-pane story as a small multiple, not a
-dual axis. See the [examples gallery](examples/index.md).
+Thirteen new types plus combo (per-series mark mixing), for 19 at the time:
+bubble, sparkline, histogram, boxplot, candlestick, OHLC, waterfall, heatmap,
+treemap, sunburst, funnel, radar, and gauge — each with palette slots by
+identity, a data-table representation, and full keyboard navigation. The
+financial types got their volume-pane story as a small multiple, not a dual axis.
 
 ## Renderers
 
 The `Renderer` interface exists precisely so these slot in without touching
-chart code:
+chart code — and v0.3 added a reason to want them:
 
 - **SVG renderer** — for print/export pipelines and style-by-CSS use cases
   (design systems that must restyle marks with stylesheets). Same visual
-  spec; one retained node per mark, so intended for small/medium data.
+  spec; one retained node per mark, so intended for small/medium data. It is also
+  what `exportImage({ format: 'svg' })` needs: today that call **rejects** with
+  "SVG renderer not available".
 - **WebGL renderer** — for the 1M+ point regime where Canvas 2D fill rate
   becomes the ceiling. Targets scatter and line first. Automatic renderer
   selection by data size is a possible follow-on once both exist.
@@ -40,16 +76,18 @@ chart code:
   so the HTML payload contains real chart content (today, wrappers are
   SSR-safe but the chart appears at hydration). Also unlocks static-site and
   email use.
-- **Image/PDF export** — first-class `toImage`/`toPDF`-style export built on
-  the SVG renderer for vector-quality print output.
+- **Vector export** — `exportImage({ format: 'svg' })` and a PDF path, both built
+  on the SVG renderer above, for vector-quality print output.
 
-## Chart types
+## Interaction
 
-- The v0.1 chart-type wishlist (financial and statistical types) shipped in
-  v0.2 — see [Shipped in 0.2](#shipped-in-0-2) above.
-- Still open: **error bars** as a series decoration on cartesian types.
-- Any future type follows the same rules: palette slots by identity, a
-  data-table representation, and full keyboard navigation before it ships.
+- **Parallel-coordinates brushing** — filtering lines by dragging on an axis. The
+  seam is already pure and documented (a decorator can map a pointer x to a
+  dimension and a pixel back to that axis's value); the decorator itself is not
+  written yet.
+- **Category-axis zoom** — the viewport applies to continuous axes only, because
+  windowing a band scale would desynchronize band indices from `categories`. A
+  band-aware viewport is possible but needs a contract decision first.
 
 ## Data
 
@@ -59,16 +97,18 @@ chart code:
 
 ## Extensibility
 
-- **Plugin system** — a documented lifecycle-hook surface (annotations,
-  custom overlays, exporters) so today's "reach for the `Chart` instance and
-  the exported scales" patterns get a supported, versioned home.
+- **Stabilizing the decorator API** — promoting [it](extensibility.md) out of
+  experimental: freezing the hook set, deciding whether decorators can be scoped
+  per chart instead of per build, and giving `LegendItem` / `A11yTableSpec` public
+  type exports so a decorator's hooks are fully typed from the package root.
 
 ## Quality infrastructure
 
 - **Visual regression harness** — pixel-diff snapshots of every example and
   mark-spec fixture across themes and DPRs, wired into CI, so the visual
   quality bar in the contract is enforced by machines rather than reviewers'
-  eyes.
+  eyes. The v0.3 determinism rules (no `Math.random()` in any layout) exist partly
+  to make this possible.
 
 ## Non-goals
 
@@ -76,6 +116,13 @@ For clarity, some things stay out regardless of demand:
 
 - **Dual y-axes** — two measures of different scale get two charts or an
   indexed common base ([why](concepts/scales-and-axes.md#one-y-axis-on-purpose)).
-- **Runtime dependencies in core** — zero now, zero later.
+  This includes Pareto charts: a cumulative line belongs on the same normalized
+  scale as its bars, or in a small multiple.
+- **Runtime dependencies in core** — zero now, zero later. That is why no map
+  topology is bundled: `choropleth.geojson` is always yours.
 - **Unvalidated palette growth** — no 9th categorical slot; beyond 8, design
   changes (fold to "Other", small multiples), not color generation.
+- **Radius-linear encodings** — rose radius, bubble and network node radius are
+  always √value. Area-true or not at all.
+- **A project planner** — the gantt type draws spans. Dependencies, critical paths
+  and resource levelling belong to a planning tool, not a chart library.

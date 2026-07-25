@@ -82,6 +82,57 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
   writable: true,
 });
 
+// ---- canvas encoding stubs ------------------------------------------------
+// jsdom implements neither toBlob (its callback is NEVER invoked) nor
+// toDataURL (returns null) without the native `canvas` package. Both are
+// stubbed to behave like a browser so image export is testable; every
+// encode is recorded so tests can assert the backing-store size (scale).
+
+export interface EncodedCanvas {
+  width: number;
+  height: number;
+  type: string;
+}
+
+export const encodedCanvases: EncodedCanvas[] = [];
+
+/** PNG signature — enough to prove the blob carries image bytes. */
+const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+
+function fakeImageBytes(canvas: HTMLCanvasElement) {
+  const bytes = new Uint8Array(PNG_MAGIC.length + 4);
+  bytes.set(PNG_MAGIC, 0);
+  bytes[8] = canvas.width & 0xff;
+  bytes[9] = (canvas.width >> 8) & 0xff;
+  bytes[10] = canvas.height & 0xff;
+  bytes[11] = (canvas.height >> 8) & 0xff;
+  return bytes;
+}
+
+Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', {
+  value: function toBlob(
+    this: HTMLCanvasElement,
+    callback: (blob: Blob | null) => void,
+    type = 'image/png',
+  ) {
+    encodedCanvases.push({ width: this.width, height: this.height, type });
+    const bytes = fakeImageBytes(this);
+    queueMicrotask(() => callback(new Blob([bytes], { type })));
+  },
+  configurable: true,
+  writable: true,
+});
+
+Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', {
+  value: function toDataURL(this: HTMLCanvasElement, type = 'image/png') {
+    encodedCanvases.push({ width: this.width, height: this.height, type });
+    const bin = String.fromCharCode(...fakeImageBytes(this));
+    return `data:${type};base64,${btoa(bin)}`;
+  },
+  configurable: true,
+  writable: true,
+});
+
 // ---- ResizeObserver stub --------------------------------------------------
 export const resizeObservers: StubResizeObserver[] = [];
 

@@ -1,5 +1,6 @@
 <!--
-  <PieChart {options} on:pointclick on:pointenter on:pointleave on:legendtoggle />
+  <PieChart {options} on:pointclick on:pointenter on:pointleave on:legendtoggle
+    on:zoom on:annotationclick />
   Same as <Chart> minus `type` (injected as 'pie').
 -->
 <script>
@@ -27,4 +28,6 @@
   on:pointenter
   on:pointleave
   on:legendtoggle
+  on:zoom
+  on:annotationclick
 />

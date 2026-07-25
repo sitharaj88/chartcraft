@@ -309,6 +309,19 @@ export const heatmapDefinition: ChartTypeDefinition = {
     return { columns: ['Series', ...labels], rows };
   },
 
+  /** A heat map has ROWS x COLUMNS of cells, not "points". */
+  a11ySummary(ctx): string | null {
+    const { model } = ctx;
+    const rows = model.series.filter((s) => s.visible).length;
+    const cols = Math.max(model.categories?.length ?? 0, model.maxLen);
+    if (rows === 0 || cols === 0) return 'no data';
+    const [min, max] = heatmapExtent(ctx.model, ctx.opts.heatmap);
+    return (
+      `${rows} ${rows === 1 ? 'row' : 'rows'} x ${cols} ${cols === 1 ? 'column' : 'columns'} ` +
+      `(${rows * cols} cells), color scale from ${formatValue(min)} to ${formatValue(max)}`
+    );
+  },
+
   keyboardNav(model) {
     // Row-major: Left/Right walk columns (pi), Up/Down walk rows (si).
     return {

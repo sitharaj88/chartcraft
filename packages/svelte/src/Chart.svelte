@@ -2,7 +2,8 @@
   @chartcraft/svelte — thin Svelte wrapper around @chartcraft/core.
 
   Usage:
-    <Chart {options} on:pointclick on:pointenter on:pointleave on:legendtoggle />
+    <Chart {options} on:pointclick on:pointenter on:pointleave on:legendtoggle
+           on:zoom on:annotationclick />
 
   Instance access: either `bind:this={component}` then `component.getChart()`,
   or listen for events. SSR-safe: the chart is created in onMount only.

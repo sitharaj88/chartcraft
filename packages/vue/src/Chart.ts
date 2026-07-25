@@ -42,10 +42,14 @@ const chartEmits = {
   'point-enter': (_ev: PointEvent) => true,
   'point-leave': (_ev: PointEvent) => true,
   'legend-toggle': (_ev: ChartEventMap['legendtoggle']) => true,
+  // v0.3
+  zoom: (_ev: ChartEventMap['zoom']) => true,
+  'annotation-click': (_ev: ChartEventMap['annotationclick']) => true,
 };
 
 /**
- * `<Chart :options="opts" @point-click @point-enter @point-leave @legend-toggle />`
+ * `<Chart :options="opts" @point-click @point-enter @point-leave @legend-toggle
+ *   @zoom @annotation-click />`
  * Template refs reach the instance via the exposed `chart` getter.
  */
 export const Chart = defineComponent({
@@ -65,6 +69,8 @@ export const Chart = defineComponent({
       c.on('pointenter', (ev) => emit('point-enter', ev));
       c.on('pointleave', (ev) => emit('point-leave', ev));
       c.on('legendtoggle', (ev) => emit('legend-toggle', ev));
+      c.on('zoom', (ev) => emit('zoom', ev));
+      c.on('annotationclick', (ev) => emit('annotation-click', ev));
       chart.value = c;
     });
 
@@ -106,6 +112,8 @@ function typedChart(type: ChartType, name: string) {
           onPointEnter: (ev: PointEvent) => emit('point-enter', ev),
           onPointLeave: (ev: PointEvent) => emit('point-leave', ev),
           onLegendToggle: (ev: ChartEventMap['legendtoggle']) => emit('legend-toggle', ev),
+          onZoom: (ev: ChartEventMap['zoom']) => emit('zoom', ev),
+          onAnnotationClick: (ev: ChartEventMap['annotationclick']) => emit('annotation-click', ev),
         });
     },
   });
@@ -131,3 +139,24 @@ export const SunburstChart = typedChart('sunburst', 'SunburstChart');
 export const FunnelChart = typedChart('funnel', 'FunnelChart');
 export const RadarChart = typedChart('radar', 'RadarChart');
 export const GaugeChart = typedChart('gauge', 'GaugeChart');
+// v0.3 chart types
+export const RangeareaChart = typedChart('rangearea', 'RangeareaChart');
+export const BulletChart = typedChart('bullet', 'BulletChart');
+export const DumbbellChart = typedChart('dumbbell', 'DumbbellChart');
+export const LollipopChart = typedChart('lollipop', 'LollipopChart');
+export const SlopeChart = typedChart('slope', 'SlopeChart');
+export const StreamgraphChart = typedChart('streamgraph', 'StreamgraphChart');
+export const MarimekkoChart = typedChart('marimekko', 'MarimekkoChart');
+export const PyramidChart = typedChart('pyramid', 'PyramidChart');
+export const CalendarChart = typedChart('calendar', 'CalendarChart');
+export const RadialbarChart = typedChart('radialbar', 'RadialbarChart');
+export const RoseChart = typedChart('rose', 'RoseChart');
+export const ViolinChart = typedChart('violin', 'ViolinChart');
+export const ParallelChart = typedChart('parallel', 'ParallelChart');
+export const IcicleChart = typedChart('icicle', 'IcicleChart');
+export const CirclepackChart = typedChart('circlepack', 'CirclepackChart');
+export const WordcloudChart = typedChart('wordcloud', 'WordcloudChart');
+export const SankeyChart = typedChart('sankey', 'SankeyChart');
+export const GanttChart = typedChart('gantt', 'GanttChart');
+export const ChoroplethChart = typedChart('choropleth', 'ChoroplethChart');
+export const NetworkChart = typedChart('network', 'NetworkChart');
