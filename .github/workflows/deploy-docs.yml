@@ -23,7 +23,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      # `enablement: true` provisions the Pages site on first run, so a fresh
+      # clone of this repo deploys without anyone visiting Settings → Pages.
+      # Without it, `actions/deploy-pages` fails with "Get Pages site failed"
+      # until Pages is switched on by hand.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - run: npm ci
       - run: npm run build
       - run: npm run docs:build

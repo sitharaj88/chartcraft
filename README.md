@@ -128,8 +128,12 @@ npm run docs:build # static docs site → docs/.vitepress/dist
 ```
 
 The docs site deploys to GitHub Pages automatically on push to `main`
-(`.github/workflows/deploy-docs.yml`) — enable **Settings → Pages → Source:
-GitHub Actions** in the repository once.
+(`.github/workflows/deploy-docs.yml`). The workflow provisions the Pages site
+itself (`configure-pages` with `enablement: true`), so no manual setup is
+needed; the base path is derived from the repository name, so the site is
+served correctly whether it is a project page or a user page.
+
+Live at <https://sitharaj88.github.io/chartcraft/>.
 
 The public API surface is defined by [`docs/api-contract.md`](docs/api-contract.md)
 — core implements it, wrappers consume it, docs document it. See
