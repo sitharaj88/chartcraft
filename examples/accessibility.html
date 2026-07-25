@@ -1,5 +1,5 @@
-﻿<!--
-  ChartCraft example â€” accessibility features.
+<!--
+  ChartCraft example — accessibility features.
   Run `npm run build` at the repo root first, then serve the REPO ROOT with any
   static server (e.g. `npx serve`) and open /examples/accessibility.html.
 -->
@@ -8,7 +8,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ChartCraft â€” Accessibility</title>
+  <title>ChartCraft — Accessibility</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -33,7 +33,7 @@
   </style>
 </head>
 <body>
-  <p><a href="index.html">â† All examples</a></p>
+  <p><a href="index.html">← All examples</a></p>
 
   <div id="chart"></div>
 
@@ -42,8 +42,8 @@
     <thead><tr><th scope="col">Key</th><th scope="col">Action</th></tr></thead>
     <tbody>
       <tr><td><kbd>Tab</kbd></td><td>Focus the chart (then the legend buttons)</td></tr>
-      <tr><td><kbd>â†’</kbd> / <kbd>â†</kbd></td><td>Next / previous point in the current series</td></tr>
-      <tr><td><kbd>â†“</kbd> / <kbd>â†‘</kbd></td><td>Same point, next / previous visible series</td></tr>
+      <tr><td><kbd>→</kbd> / <kbd>←</kbd></td><td>Next / previous point in the current series</td></tr>
+      <tr><td><kbd>↓</kbd> / <kbd>↑</kbd></td><td>Same point, next / previous visible series</td></tr>
       <tr><td><kbd>Home</kbd> / <kbd>End</kbd></td><td>First / last point in the series</td></tr>
       <tr><td><kbd>Enter</kbd></td><td>Activate the focused point (fires <code>pointclick</code>)</td></tr>
     </tbody>
@@ -52,7 +52,7 @@
   <h2>What to notice</h2>
   <p class="note">
     The data table below the chart is the parallel DOM layer with
-    <code>a11y.table: 'visible'</code> â€” by default it is rendered visually
+    <code>a11y.table: 'visible'</code> — by default it is rendered visually
     hidden but fully screen-reader readable. Each keyboard move is announced
     through an <code>aria-live</code> region (e.g. "Checkout, Mar: 3.1"), and
     the focused point shows the same highlight and tooltip as hover. Legend

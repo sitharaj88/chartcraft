@@ -94,6 +94,11 @@ By default the legend is **auto**: shown when there are 2+ series, hidden for
 a single series (the chart title names it). `legend: true` / `legend: false`
 force it on or off; an object configures it.
 
+For `pie` and `donut` charts the legend lists **slices** instead — each item
+shows the slice's label next to its color, so slice identity never relies on
+color alone. Auto keys off the slice count (shown for 2+ slices), and slice
+items are not click-toggleable.
+
 With `interactive: true` (default), clicking a legend item toggles that
 series' `visible` flag. Toggling:
 

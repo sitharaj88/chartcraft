@@ -1,5 +1,5 @@
-﻿<!--
-  ChartCraft example â€” 100,000 points with LTTB downsampling.
+<!--
+  ChartCraft example — 100,000 points with LTTB downsampling.
   Run `npm run build` at the repo root first, then serve the REPO ROOT with any
   static server (e.g. `npx serve`) and open /examples/large-data.html.
 -->
@@ -8,7 +8,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ChartCraft â€” Large data (100k points)</title>
+  <title>ChartCraft — Large data (100k points)</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -33,7 +33,7 @@
   </style>
 </head>
 <body>
-  <p><a href="index.html">â† All examples</a></p>
+  <p><a href="index.html">← All examples</a></p>
 
   <div class="controls">
     <button type="button" id="ds-on" aria-pressed="true">Downsampling on (threshold 5000)</button>
@@ -44,7 +44,7 @@
   <div id="chart"></div>
   <p class="note">
     100,000 simulated sensor readings (one every ~5&nbsp;s over 6 days). With
-    downsampling on â€” the default â€” series beyond the threshold are reduced
+    downsampling on — the default — series beyond the threshold are reduced
     with LTTB (Largest-Triangle-Three-Buckets) before rendering, preserving
     peaks, troughs, and outliers. Tooltips, events, and the accessibility data
     table always use the full-resolution data. Try both modes and drag-resize
@@ -55,10 +55,10 @@
     import { createChart } from '../packages/core/dist/index.mjs';
 
     // 100k points: epoch-ms x (numbers, cheaper than Date objects at this
-    // scale â€” hence the explicit time axis), noisy daily-cycle temperature y.
+    // scale — hence the explicit time axis), noisy daily-cycle temperature y.
     const N = 100_000;
     const start = Date.parse('2026-07-01T00:00:00Z');
-    const stepMs = 5_184; // â‰ˆ 6 days / 100k
+    const stepMs = 5_184; // ≈ 6 days / 100k
     const data = new Array(N);
     let s = 1234567;
     for (let i = 0; i < N; i++) {
@@ -66,7 +66,7 @@
       const t = start + i * stepMs;
       const daily = 4.5 * Math.sin((2 * Math.PI * (i * stepMs)) / 86_400_000);
       const noise = ((s % 1000) / 1000 - 0.5) * 1.6;
-      const spike = s % 9973 === 0 ? 6 : 0; // rare outliers â€” LTTB keeps them
+      const spike = s % 9973 === 0 ? 6 : 0; // rare outliers — LTTB keeps them
       data[i] = [t, Math.round((21 + daily + noise + spike) * 100) / 100];
     }
 
@@ -78,7 +78,7 @@
         series: [{ id: 'temp', name: 'Temperature', data, showMarkers: false }],
       },
       xAxis: { type: 'time', label: 'Time' },
-      yAxis: { label: 'Â°C' },
+      yAxis: { label: '°C' },
       animation: false, // measuring render cost, not the easing function
       downsample: { enabled: true, threshold: 5000 }, // the default, stated explicitly
     });

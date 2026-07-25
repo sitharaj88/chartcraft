@@ -85,9 +85,17 @@ export function resolveOptions(raw: ChartOptions): ResolvedOptions {
         };
 
   const seriesCount = raw.data?.series?.length ?? 0;
+  // Pie/donut legends list slices, so "auto" keys off slice count instead.
+  const sliceCount =
+    type === 'pie' || type === 'donut'
+      ? (raw.data?.series?.[0]?.data ?? []).filter((d) => {
+          const y = typeof d === 'number' ? d : Array.isArray(d) ? d[1] : d && typeof d === 'object' ? d.y : null;
+          return typeof y === 'number' && y > 0;
+        }).length
+      : 0;
   const legendRaw: LegendOptions = typeof raw.legend === 'boolean' ? { show: raw.legend } : (raw.legend ?? {});
   const legend: ResolvedLegend = {
-    show: legendRaw.show ?? seriesCount >= 2, // auto: shown when series >= 2
+    show: legendRaw.show ?? (type === 'pie' || type === 'donut' ? sliceCount >= 2 : seriesCount >= 2), // auto
     position: legendRaw.position ?? 'top',
     interactive: legendRaw.interactive ?? true,
   };

@@ -1,5 +1,5 @@
-﻿<!--
-  ChartCraft example â€” theme switching with chart.update().
+<!--
+  ChartCraft example — theme switching with chart.update().
   Run `npm run build` at the repo root first, then serve the REPO ROOT with any
   static server (e.g. `npx serve`) and open /examples/dark-mode.html.
 -->
@@ -8,7 +8,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ChartCraft â€” Dark mode</title>
+  <title>ChartCraft — Dark mode</title>
   <style>
     :root { color-scheme: light dark; }
     body {
@@ -23,18 +23,18 @@
     a { color: #2a78d6; } body.dark a { color: #3987e5; }
     #chart { height: 380px; }
     .controls { display: flex; gap: .5rem; margin-bottom: 1rem; }
-    button {
+    .controls button {
       font: inherit; padding: .4rem .9rem; border-radius: 6px; cursor: pointer;
       border: 1px solid #c3c2b7; background: transparent; color: inherit;
     }
-    body.dark button { border-color: #383835; }
-    button[aria-pressed="true"] { border-color: #2a78d6; outline: 2px solid #2a78d6; outline-offset: -1px; }
+    body.dark .controls button { border-color: #383835; }
+    .controls button[aria-pressed="true"] { border-color: #2a78d6; outline: 2px solid #2a78d6; outline-offset: -1px; }
     p.note { font-size: .9rem; color: #52514e; }
     body.dark p.note { color: #c3c2b7; }
   </style>
 </head>
 <body class="auto">
-  <p><a href="index.html">â† All examples</a></p>
+  <p><a href="index.html">← All examples</a></p>
 
   <div class="controls" role="group" aria-label="Chart theme">
     <button type="button" data-theme="light" aria-pressed="false">Light</button>
@@ -44,7 +44,7 @@
 
   <div id="chart"></div>
   <p class="note">
-    Each click calls <code>chart.update({ theme })</code> â€” a diffed re-render,
+    Each click calls <code>chart.update({ theme })</code> — a diffed re-render,
     not a rebuild. In <strong>Auto</strong>, the chart tracks
     <code>prefers-color-scheme</code> live: switch your OS theme and watch it follow.
     Dark palette values are separately validated, not an inversion of light.

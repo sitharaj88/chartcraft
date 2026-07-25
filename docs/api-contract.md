@@ -57,7 +57,9 @@ interface ChartOptions {
   stacked?: boolean;                               // bar/area stacking
   horizontal?: boolean;                            // bar only: horizontal bars
   // Components
-  legend?: LegendOptions | boolean;                // default: auto (shown when series >= 2, hidden for 1)
+  legend?: LegendOptions | boolean;                // default: auto (shown when series >= 2, hidden for 1;
+                                                   // pie/donut: legend lists slices, auto keys off slice count,
+                                                   // slice items are non-toggleable)
   tooltip?: TooltipOptions | boolean;              // default: true
   // Behavior
   animation?: AnimationOptions | boolean;          // default: true; auto-disabled by prefers-reduced-motion

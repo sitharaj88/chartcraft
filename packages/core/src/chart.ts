@@ -32,13 +32,13 @@ import { LogScale } from './scales/log';
 import type { ContinuousScale, HoverState, Layout, PieSlice, PointPos, Rect, Tick } from './layout';
 import { drawGrid } from './components/grid';
 import { drawAxes, tickFont } from './components/axis';
-import { Legend } from './components/legend';
+import { Legend, type LegendItem } from './components/legend';
 import { Tooltip, defaultTooltipHTML } from './components/tooltip';
 import { renderLine } from './charts/line';
 import { renderArea } from './charts/area';
 import { renderBar, BAR_GAP } from './charts/bar';
 import { renderScatter } from './charts/scatter';
-import { computeSlices, renderPie, START_ANGLE } from './charts/pie';
+import { computeSliceMeta, computeSlices, renderPie, START_ANGLE } from './charts/pie';
 import { indicesAtX, nearestByX, nearestPoint, sliceAt, HIT_RADIUS } from './interaction/hittest';
 import { Announcer, buildDataTable, generateAriaLabel, visuallyHide } from './a11y';
 import { navigate, type NavPosition } from './a11y/keyboard';
@@ -622,8 +622,25 @@ class ChartImpl implements Chart {
     this.root.style.background = t.surface;
     this.root.style.flexDirection = o.legend.position === 'right' ? 'row' : 'column';
 
-    // Legend mount order.
-    this.legend.update(m.series, t, o.legend);
+    // Legend mount order. Cartesian charts list series (toggleable); pie and
+    // donut list slices so slice identity never rides on color alone.
+    const legendItems: LegendItem[] =
+      o.type === 'pie' || o.type === 'donut'
+        ? computeSliceMeta(m, t).map((sl) => ({
+            id: `slice:${sl.pi}`,
+            name: sl.label,
+            color: sl.color,
+            visible: true,
+            toggleable: false,
+          }))
+        : m.series.map((s) => ({
+            id: s.id,
+            name: s.name,
+            color: seriesColor(s, t),
+            visible: s.visible,
+            toggleable: true,
+          }));
+    this.legend.update(legendItems, t, o.legend);
     if (o.legend.position === 'top') {
       if (this.root.firstChild !== this.legend.el) this.root.insertBefore(this.legend.el, this.wrap);
     } else {

@@ -161,7 +161,7 @@ type ChartType = 'line' | 'area' | 'bar' | 'scatter' | 'pie' | 'donut';
 | `yAxis` | `AxisOptions` | see [`AxisOptions`](#axisoptions) | Y-axis config. Cartesian types only. |
 | `stacked` | `boolean` | `false` | Stack series. `bar` and `area` only. |
 | `horizontal` | `boolean` | `false` | Horizontal bars (categories on the y-axis, values on x). `bar` only. |
-| `legend` | `LegendOptions \| boolean` | auto | Default: shown when there are ≥ 2 series, hidden for 1. `true`/`false` force; object configures. See [`LegendOptions`](#legendoptions). |
+| `legend` | `LegendOptions \| boolean` | auto | Default: shown when there are ≥ 2 series, hidden for 1. For `pie`/`donut` the legend lists **slices** (label + slice color) so identity never relies on color alone; auto keys off the slice count and slice items are not toggleable. `true`/`false` force; object configures. See [`LegendOptions`](#legendoptions). |
 | `tooltip` | `TooltipOptions \| boolean` | `true` | See [`TooltipOptions`](#tooltipoptions). |
 | `animation` | `AnimationOptions \| boolean` | `true` | Entry/update/toggle animation. Auto-disabled when the user has `prefers-reduced-motion: reduce`. See [`AnimationOptions`](#animationoptions). |
 | `downsample` | `{ enabled?: boolean; threshold?: number }` | `{ enabled: true, threshold: 5000 }` | Automatic LTTB downsampling for `line`/`area`/`scatter` series beyond `threshold` points. Render-side only — tooltips, events, and the data table use full data. See [Performance](../performance.md#lttb-downsampling). |

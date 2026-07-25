@@ -1,9 +1,19 @@
 /**
- * Legend: a DOM element with one interactive item per series.
- * Legend text is always ink-colored — the swatch carries the series color.
+ * Legend: a DOM element with one item per entry — series for cartesian
+ * charts, slices for pie/donut. Legend text is always ink-colored — the
+ * swatch carries the color. Items are only interactive when they can be
+ * toggled (series yes, slices not yet).
  */
 import type { Theme } from '../types';
-import { seriesColor, type NormalizedSeries, type ResolvedLegend } from '../model';
+import type { ResolvedLegend } from '../model';
+
+export interface LegendItem {
+  id: string;
+  name: string;
+  color: string;
+  visible: boolean;
+  toggleable: boolean;
+}
 
 export interface LegendCallbacks {
   onToggle(seriesId: string): void;
@@ -26,7 +36,7 @@ export class Legend {
     st.margin = '4px 8px';
   }
 
-  update(series: readonly NormalizedSeries[], theme: Theme, legend: ResolvedLegend): void {
+  update(items: readonly LegendItem[], theme: Theme, legend: ResolvedLegend): void {
     const doc = this.el.ownerDocument;
     this.el.style.display = legend.show ? 'flex' : 'none';
     this.el.style.justifyContent = legend.position === 'right' ? 'flex-start' : 'center';
@@ -34,14 +44,19 @@ export class Legend {
     this.el.textContent = '';
     if (!legend.show) return;
 
-    for (const s of series) {
+    for (const s of items) {
+      const toggleable = legend.interactive && s.toggleable;
       const item = doc.createElement('button');
       item.type = 'button';
       item.className = 'chartcraft-legend-item';
       item.dataset.seriesId = s.id;
       item.setAttribute('role', 'listitem');
-      item.setAttribute('aria-pressed', String(s.visible));
-      item.setAttribute('aria-label', `${s.name}: ${s.visible ? 'visible' : 'hidden'}`);
+      if (s.toggleable) {
+        item.setAttribute('aria-pressed', String(s.visible));
+        item.setAttribute('aria-label', `${s.name}: ${s.visible ? 'visible' : 'hidden'}`);
+      } else {
+        item.setAttribute('aria-label', s.name);
+      }
       const ist = item.style;
       ist.display = 'inline-flex';
       ist.alignItems = 'center';
@@ -50,7 +65,7 @@ export class Legend {
       ist.background = 'none';
       ist.padding = '2px 4px';
       ist.font = `${theme.fontSize}px ${theme.fontFamily}`;
-      ist.cursor = legend.interactive ? 'pointer' : 'default';
+      ist.cursor = toggleable ? 'pointer' : 'default';
       ist.opacity = s.visible ? '1' : '0.45';
 
       const swatch = doc.createElement('span');
@@ -60,8 +75,8 @@ export class Legend {
       sst.width = '10px';
       sst.height = '10px';
       sst.borderRadius = '3px';
-      sst.background = s.visible ? seriesColor(s, theme) : 'transparent';
-      sst.boxShadow = s.visible ? 'none' : `inset 0 0 0 1.5px ${seriesColor(s, theme)}`;
+      sst.background = s.visible ? s.color : 'transparent';
+      sst.boxShadow = s.visible ? 'none' : `inset 0 0 0 1.5px ${s.color}`;
       sst.flexShrink = '0';
 
       const label = doc.createElement('span');
@@ -71,7 +86,7 @@ export class Legend {
       label.style.color = theme.textSecondary;
 
       item.append(swatch, label);
-      if (legend.interactive) {
+      if (toggleable) {
         item.addEventListener('click', () => this.cb.onToggle(s.id));
       } else {
         item.disabled = true;

@@ -82,6 +82,47 @@ describe('legend', () => {
     expect(onToggle).not.toHaveBeenCalled();
   });
 
+  it('pie: auto-shows for >= 2 slices even though there is a single series', () => {
+    const pie = mount({
+      type: 'pie',
+      data: { categories: ['A', 'B', 'C'], series: [{ name: 'Share', data: [5, 3, 2] }] },
+    });
+    expect((pie.el.querySelector('.chartcraft-legend') as HTMLElement).style.display).not.toBe('none');
+    // A one-slice pie has nothing to distinguish — legend stays hidden.
+    const single = mount({ type: 'pie', data: { series: [{ name: 'Share', data: [5] }] } });
+    expect((single.el.querySelector('.chartcraft-legend') as HTMLElement).style.display).toBe('none');
+  });
+
+  it('pie: legend lists slice labels with distinct slice colors', () => {
+    const { el } = mount({
+      type: 'donut',
+      data: { categories: ['Compute', 'Storage', 'Network'], series: [{ name: 'Spend', data: [6, 3, 1] }] },
+    });
+    const items = legendItems(el);
+    expect(items.map((i) => i.querySelector('.chartcraft-legend-label')!.textContent)).toEqual([
+      'Compute',
+      'Storage',
+      'Network',
+    ]);
+    const colors = items.map((i) => (i.querySelector('.chartcraft-legend-swatch') as HTMLElement).style.background);
+    expect(new Set(colors).size).toBe(3);
+    expect(colors.every((c) => c !== '')).toBe(true);
+  });
+
+  it('pie: slice legend items are not toggleable and emit no legendtoggle', () => {
+    const { el, chart } = mount({
+      type: 'pie',
+      data: { categories: ['A', 'B'], series: [{ name: 'Share', data: [5, 3] }] },
+    });
+    const onToggle = vi.fn();
+    chart.on('legendtoggle', onToggle);
+    const item = legendItems(el)[0]!;
+    expect(item.hasAttribute('aria-pressed')).toBe(false);
+    expect(item.disabled).toBe(true);
+    item.click();
+    expect(onToggle).not.toHaveBeenCalled();
+  });
+
   it('legend position bottom mounts the legend after the canvas wrap', () => {
     const { el } = mount({ type: 'line', data: twoSeries, legend: { position: 'bottom' } });
     const root = el.querySelector('.chartcraft') as HTMLElement;

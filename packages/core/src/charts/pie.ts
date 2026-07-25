@@ -10,47 +10,69 @@ export const DONUT_INNER_RATIO = 0.6;
 export const SLICE_GAP = 2;
 export const START_ANGLE = -Math.PI / 2;
 
+export interface SliceMeta {
+  pi: number;
+  label: string;
+  color: string;
+  value: number;
+}
+
 /**
- * Compute slice geometry from the first visible series. Non-positive and
- * null values are skipped (they have no angular extent).
+ * Identity of each slice — label, color, value — independent of geometry.
+ * Non-positive and null values are skipped (they have no angular extent).
+ * The legend consumes this directly so slice identity is never color-alone.
  */
-export function computeSlices(model: DataModel, plot: Rect, theme: Theme): PieSlice[] {
+export function computeSliceMeta(model: DataModel, theme: Theme): SliceMeta[] {
   const series = model.series.find((s) => s.visible);
   if (!series) return [];
-  const cx = plot.x + plot.w / 2;
-  const cy = plot.y + plot.h / 2;
-  const r1 = Math.max(4, Math.min(plot.w, plot.h) / 2 - 4);
-  const r0 = model.type === 'donut' ? r1 * DONUT_INNER_RATIO : 0;
-
   const values = series.points.map((p) => (p.y !== null && p.y > 0 ? p.y : 0));
-  const total = values.reduce((a, b) => a + b, 0);
-  if (total <= 0) return [];
+  if (values.reduce((a, b) => a + b, 0) <= 0) return [];
 
-  const slices: PieSlice[] = [];
-  let angle = START_ANGLE;
+  const metas: SliceMeta[] = [];
   series.points.forEach((p, pi) => {
     const v = values[pi] ?? 0;
     if (v <= 0) return;
-    const sweep = (v / total) * Math.PI * 2;
     const cat = model.categories?.[pi];
     const label =
       p.label ??
       (typeof p.x === 'string' ? p.x : cat !== undefined ? String(cat instanceof Date ? cat.toDateString() : cat) : String(pi + 1));
-    slices.push({
+    metas.push({
       pi,
+      label,
+      color: p.color ?? theme.series[metas.length % theme.series.length] ?? seriesColor(series, theme),
+      value: v,
+    });
+  });
+  return metas;
+}
+
+export function computeSlices(model: DataModel, plot: Rect, theme: Theme): PieSlice[] {
+  const metas = computeSliceMeta(model, theme);
+  if (metas.length === 0) return [];
+  const cx = plot.x + plot.w / 2;
+  const cy = plot.y + plot.h / 2;
+  const r1 = Math.max(4, Math.min(plot.w, plot.h) / 2 - 4);
+  const r0 = model.type === 'donut' ? r1 * DONUT_INNER_RATIO : 0;
+  const total = metas.reduce((a, m) => a + m.value, 0);
+
+  let angle = START_ANGLE;
+  return metas.map((m) => {
+    const sweep = (m.value / total) * Math.PI * 2;
+    const slice: PieSlice = {
+      pi: m.pi,
       a0: angle,
       a1: angle + sweep,
       cx,
       cy,
       r0,
       r1,
-      color: p.color ?? theme.series[slices.length % theme.series.length] ?? seriesColor(series, theme),
-      label,
-      value: v,
-    });
+      color: m.color,
+      label: m.label,
+      value: m.value,
+    };
     angle += sweep;
+    return slice;
   });
-  return slices;
 }
 
 export function renderPie(ctx: RenderContext): void {
