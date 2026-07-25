@@ -1,9 +1,11 @@
 name: CI
 
+# Manual only — run from the Actions tab ("Run workflow"), or with
+#   gh workflow run ci.yml --ref main
+# Automatic push/pull_request triggers are intentionally disabled; re-enable by
+# restoring the `push:`/`pull_request:` keys below.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
   build-and-test:
