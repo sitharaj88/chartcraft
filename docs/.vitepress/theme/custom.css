@@ -82,13 +82,19 @@
 /* Live demo containers (used by every examples/feature page)        */
 /* ---------------------------------------------------------------- */
 
+/*
+ * The demo frame is the same card as the gallery and the home sections:
+ * one radius, one hairline, one elevation, so a demo dropped into a docs
+ * page reads as part of the design rather than an embed.
+ */
 .chart-demo {
   box-sizing: border-box;
   margin: 16px 0;
   padding: 12px;
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
-  background-color: var(--vp-c-bg);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius);
+  background-color: var(--cc-surface);
+  box-shadow: var(--cc-shadow-sm);
   overflow: hidden;
 }
 

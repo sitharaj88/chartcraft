@@ -1,0 +1,1158 @@
+/**
+ * ChartCraft docs — inner-page design system.
+ *
+ * `custom.css` establishes the brand tokens and the landing/gallery
+ * primitives. This file extends exactly that language across every
+ * documentation page: typography, sidebar, code, tables, containers, page
+ * furniture. It defines NO new colour system — every value below resolves to
+ * a token already declared in `custom.css` or to one of VitePress's own
+ * `--vp-*` variables, which is also why most rules here set a VitePress
+ * variable rather than fighting a theme rule.
+ */
+
+/* ---------------------------------------------------------------- */
+/* Layout + surface tokens                                           */
+/* ---------------------------------------------------------------- */
+
+:root {
+  /* A little more room for the 60-item sidebar's nested example groups. */
+  --vp-sidebar-width: 292px;
+
+  /*
+   * Two widths, deliberately different:
+   *   --cc-doc-width  the column tables, code and demos may fill
+   *   --cc-measure    the line length prose is allowed to reach
+   * Documentation reads better at ~70 characters, but an option table
+   * strangled to 70 characters is unusable. So the column is wide and the
+   * paragraphs inside it are not.
+   */
+  --cc-doc-width: 800px;
+  --cc-measure: 70ch;
+
+  /* Code surfaces: VitePress maps block bg to --vp-c-bg-alt, which in light
+     mode is the same value as --vp-c-bg-soft — so a chrome bar drawn in
+     bg-soft would be invisible. Give both an explicit value. */
+  --cc-code-bg: #f9fafc;
+  --cc-code-chrome: #edf0f5;
+
+  --cc-table-head: #f3f5f9;
+  --cc-row-hover: rgba(42, 120, 214, 0.055);
+
+  --vp-code-block-bg: var(--cc-code-bg);
+  --vp-code-tab-bg: var(--cc-code-chrome);
+  --vp-code-tab-active-bar-color: var(--vp-c-brand-1);
+  --vp-code-tab-active-text-color: var(--vp-c-brand-1);
+}
+
+.dark {
+  --cc-code-bg: #15161a;
+  --cc-code-chrome: #1e2027;
+
+  --cc-table-head: #202127;
+  --cc-row-hover: rgba(57, 135, 229, 0.09);
+}
+
+/* ---------------------------------------------------------------- */
+/* Document column                                                   */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The doubled class is not a typo. VitePress's own `.VPDoc.has-aside
+ * .content-container` rule is a scoped style, so it carries an extra
+ * `[data-v-…]` attribute selector and outranks the plain three-class form —
+ * which is why an earlier version of this file silently kept the stock 688px.
+ */
+.VPDoc.has-aside .content-container.content-container {
+  max-width: var(--cc-doc-width);
+}
+
+@media (min-width: 960px) {
+  .VPDoc:not(.has-sidebar) .content {
+    max-width: var(--cc-doc-width);
+  }
+
+  /*
+   * Reclaimed width. At exactly 1280px — sidebar + gutters + a 256px aside —
+   * the default leaves the reading column 604px, and api/core.md's option
+   * tables need ~630px to lay out without a horizontal scroll. Trimming the
+   * page gutters and the outline rail (whose links wrap anyway) buys ~80px
+   * and lets those tables simply fit.
+   */
+  .VPDoc {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .VPDoc .content {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+
+  .VPDoc .aside {
+    max-width: 224px;
+    padding-left: 24px;
+  }
+
+  .VPDoc .aside.left-aside {
+    padding-left: 0;
+    padding-right: 24px;
+  }
+
+  .VPDoc .aside-container,
+  .VPDoc .aside-curtain {
+    width: 200px;
+  }
+}
+
+/*
+ * Measure.
+ *
+ * Scoped to TOP-LEVEL prose so that paragraphs inside a table cell, a custom
+ * block or a demo keep their container's width. `<Content>` renders the
+ * compiled markdown inside one anonymous `<div>` under `.vp-doc`, so the
+ * top level is one child deeper than it looks — `.vp-doc > p` alone matches
+ * nothing at all.
+ */
+.vp-doc > :is(p, ul, ol, blockquote, dl),
+.vp-doc > div > :is(p, ul, ol, blockquote, dl) {
+  max-width: var(--cc-measure);
+}
+
+/* ---------------------------------------------------------------- */
+/* Typography                                                        */
+/* ---------------------------------------------------------------- */
+
+.vp-doc h1 {
+  margin: 0 0 8px;
+  font-size: clamp(2rem, 1.6rem + 1.4vw, 2.6rem);
+  line-height: 1.14;
+  letter-spacing: -0.028em;
+  font-weight: 750;
+  color: var(--vp-c-text-1);
+}
+
+@media (min-width: 768px) {
+  /* Overrides VitePress's own 768px h1 rule, which would otherwise win. */
+  .vp-doc h1 {
+    font-size: clamp(2rem, 1.6rem + 1.4vw, 2.6rem);
+    line-height: 1.14;
+    letter-spacing: -0.028em;
+  }
+}
+
+/* The opening paragraph of a page reads as a lede, like the home sections. */
+.vp-doc h1 + p {
+  margin-top: 18px;
+  font-size: 1.0625rem;
+  line-height: 1.68;
+  color: var(--vp-c-text-2);
+}
+
+.vp-doc h2 {
+  margin: 56px 0 20px;
+  border-top: 1px solid var(--vp-c-divider);
+  padding-top: 26px;
+  font-size: clamp(1.4rem, 1.24rem + 0.55vw, 1.7rem);
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+.vp-doc h2 .header-anchor {
+  top: 26px;
+}
+
+/*
+ * A `---` immediately before a section heading (api/core.md separates every
+ * section that way) would otherwise draw the thematic break AND the h2's own
+ * top rule, ~90px apart, reading as a layout bug. The heading's rule wins.
+ */
+.vp-doc hr + h2 {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.vp-doc h3 {
+  margin: 44px 0 0;
+  font-size: 1.24rem;
+  line-height: 1.35;
+  letter-spacing: -0.012em;
+  font-weight: 680;
+}
+
+.vp-doc h4 {
+  margin: 32px 0 0;
+  font-size: 1.06rem;
+  line-height: 1.45;
+  font-weight: 660;
+}
+
+.vp-doc h5,
+.vp-doc h6 {
+  margin: 24px 0 0;
+  font-size: 0.95rem;
+  font-weight: 660;
+}
+
+.vp-doc h2 + h3,
+.vp-doc h3 + h4 {
+  margin-top: 24px;
+}
+
+.vp-doc p {
+  margin: 18px 0;
+  line-height: 1.75;
+}
+
+.vp-doc li {
+  line-height: 1.72;
+}
+
+.vp-doc li + li {
+  margin-top: 10px;
+}
+
+.vp-doc ul,
+.vp-doc ol {
+  padding-left: 1.4rem;
+}
+
+.vp-doc ul {
+  list-style: none;
+}
+
+/* A restrained brand bullet instead of the browser disc. */
+.vp-doc ul > li {
+  position: relative;
+}
+
+.vp-doc ul > li::before {
+  content: '';
+  position: absolute;
+  top: 0.72em;
+  left: -1rem;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: var(--vp-c-brand-1);
+  opacity: 0.55;
+}
+
+.vp-doc ol > li::marker {
+  color: var(--vp-c-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-doc blockquote {
+  margin: 24px 0;
+  border-left: 3px solid var(--vp-c-brand-1);
+  border-radius: 0 var(--cc-radius) var(--cc-radius) 0;
+  padding: 4px 20px;
+  background-color: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-2);
+}
+
+.vp-doc blockquote > p {
+  margin: 14px 0;
+  font-size: 0.975rem;
+  line-height: 1.72;
+}
+
+.vp-doc hr {
+  margin: 56px 0;
+  border: 0;
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+.vp-doc a {
+  font-weight: 500;
+  text-decoration-color: var(--vp-c-brand-soft);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: color 0.2s ease, text-decoration-color 0.2s ease;
+}
+
+.vp-doc a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* Heading anchors: brand-coloured, and out in the margin when there is room. */
+.vp-doc .header-anchor {
+  color: var(--vp-c-brand-1);
+  font-weight: 400;
+  opacity: 0;
+}
+
+@media (min-width: 1280px) {
+  .vp-doc .header-anchor {
+    margin-left: -0.72em;
+  }
+}
+
+.vp-doc .header-anchor:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 3px;
+  opacity: 1;
+}
+
+/* ---------------------------------------------------------------- */
+/* Page eyebrow (rendered into the doc-before slot)                  */
+/* ---------------------------------------------------------------- */
+
+.cc-doc-eyebrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vp-c-brand-1);
+}
+
+.cc-doc-eyebrow__sep {
+  color: var(--vp-c-text-3);
+  opacity: 0.6;
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------- */
+/* Inline code                                                       */
+/* ---------------------------------------------------------------- */
+
+.vp-doc :not(pre, h1, h2, h3, h4, h5, h6) > code {
+  font-size: 0.855em;
+  font-weight: 500;
+}
+
+.vp-doc :not(pre, h1, h2, h3, h4, h5, h6) > code {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  padding: 2px 6px;
+  background-color: var(--vp-c-bg-soft);
+}
+
+.vp-doc a > code {
+  border-color: var(--vp-c-brand-soft);
+  background-color: var(--vp-c-brand-soft);
+}
+
+/*
+ * Headings are set in code far more often than usual here (`ChartOptions`,
+ * `createChart(container, options)`, whole type names). At display sizes a
+ * boxed, full-size mono run swamps the heading it belongs to, so in headings
+ * code is a weight/family shift only — no chip, no box, and a notch smaller
+ * so the mono glyphs optically match the surrounding text.
+ */
+.vp-doc h1 > code,
+.vp-doc h2 > code,
+.vp-doc h3 > code,
+.vp-doc h4 > code,
+.vp-doc h5 > code,
+.vp-doc h6 > code {
+  border: 0;
+  padding: 0;
+  background: none;
+  font-size: 0.82em;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: inherit;
+}
+
+/* ---------------------------------------------------------------- */
+/* Code blocks                                                       */
+/* ---------------------------------------------------------------- */
+
+/*
+ * VitePress bleeds code blocks past the gutter below 640px. Here the page
+ * already frames tables and demos as cards at every width, so a code block
+ * stays a card too — same margin, same radius, same hairline.
+ */
+.vp-doc div[class*='language-'],
+.vp-block {
+  margin: 24px 0;
+  padding-top: 42px;
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius);
+  background-color: var(--cc-code-bg);
+  box-shadow: var(--cc-shadow-sm);
+}
+
+@media (max-width: 639px) {
+  .vp-doc li div[class*='language-'] {
+    border-radius: var(--cc-radius);
+  }
+}
+
+/* Stacked blocks read as separate cards now that each has its own chrome. */
+.vp-doc div[class*='language-'] + div[class*='language-'],
+.vp-doc div[class$='-api'] + div[class*='language-'],
+.vp-doc div[class*='language-'] + div[class$='-api'] > div[class*='language-'] {
+  margin-top: 14px;
+}
+
+/* The chrome bar. Absolutely positioned, so it never scrolls with the code
+   (the horizontal scroller is the inner <pre>, not this box). */
+.vp-doc div[class*='language-']::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 2;
+  height: 42px;
+  border-radius: inherit;
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+  background-color: var(--cc-code-chrome);
+  box-shadow: inset 0 -1px 0 var(--cc-border);
+  pointer-events: none;
+}
+
+.vp-doc [class*='language-'] pre {
+  padding: 16px 0 18px;
+}
+
+/* Language badge: always visible, in the chrome bar, as a real label. */
+.vp-doc [class*='language-'] > span.lang,
+.vp-doc [class*='language-']:hover > button.copy + span.lang,
+.vp-doc [class*='language-'] > button.copy:focus + span.lang {
+  top: 0;
+  right: auto;
+  left: 16px;
+  z-index: 3;
+  line-height: 42px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+  opacity: 1;
+}
+
+/* Copy button: always present, quiet until you reach for it. */
+.vp-doc [class*='language-'] > button.copy {
+  top: 6px;
+  right: 8px;
+  z-index: 4;
+  width: 30px;
+  height: 30px;
+  border-color: transparent;
+  border-radius: 8px;
+  background-color: transparent;
+  background-size: 16px;
+  opacity: 0.55;
+  transition: opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.vp-doc [class*='language-']:hover > button.copy,
+.vp-doc [class*='language-'] > button.copy:focus {
+  opacity: 1;
+}
+
+.vp-doc [class*='language-'] > button.copy:hover,
+.vp-doc [class*='language-'] > button.copy.copied {
+  border-color: var(--cc-border);
+  background-color: var(--vp-c-bg);
+  opacity: 1;
+}
+
+.vp-doc [class*='language-'] > button.copy:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 1px;
+}
+
+.vp-doc [class*='language-'] > button.copy.copied,
+.vp-doc [class*='language-'] > button.copy:hover.copied {
+  border-radius: 0 8px 8px 0;
+}
+
+.vp-doc [class*='language-'] > button.copy.copied::before,
+.vp-doc [class*='language-'] > button.copy:hover.copied::before {
+  top: 0;
+  height: 30px;
+  border-color: var(--cc-border);
+  border-radius: 8px 0 0 8px;
+  background-color: var(--vp-c-bg);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------- */
+/* Code groups (every example page uses one)                         */
+/* ---------------------------------------------------------------- */
+
+.vp-code-group {
+  margin: 24px 0;
+}
+
+.vp-code-group .tabs {
+  gap: 2px;
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid var(--cc-border);
+  border-bottom: 0;
+  border-radius: var(--cc-radius) var(--cc-radius) 0 0;
+  background-color: var(--cc-code-chrome);
+  box-shadow: inset 0 -1px 0 var(--cc-border);
+}
+
+.vp-code-group .tabs label {
+  padding: 0 13px;
+  line-height: 42px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--vp-c-text-3);
+}
+
+.vp-code-group .tabs label:hover {
+  color: var(--vp-c-text-1);
+}
+
+.vp-code-group input:checked + label {
+  color: var(--vp-c-brand-1);
+}
+
+.vp-code-group .tabs label::after {
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  height: 2px;
+}
+
+.vp-code-group input:focus-visible + label {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: -3px;
+  border-radius: 6px;
+}
+
+/* Inside a group the tab bar IS the chrome, so the block drops its own. */
+.vp-code-group div[class*='language-'] {
+  margin: 0 !important;
+  padding-top: 0;
+  border-top: 0;
+  border-radius: 0 0 var(--cc-radius) var(--cc-radius) !important;
+  box-shadow: none;
+}
+
+.vp-code-group div[class*='language-']::before {
+  display: none;
+}
+
+.vp-code-group div[class*='language-'] > span.lang {
+  display: none;
+}
+
+.vp-code-group div[class*='language-'] > button.copy {
+  top: 10px;
+  right: 10px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Tables                                                            */
+/* ---------------------------------------------------------------- */
+
+/*
+ * Markdown tables are wrapped by a markdown-it rule (see config.mts) in
+ *   <div class="cc-table"><div class="cc-table__scroll"> … </div></div>
+ *
+ * The frame lives on the outer div and the overflow on the inner one, so the
+ * table keeps its rounded, elevated card at every width while the scrolling
+ * happens strictly inside that card — the page body never widens, which is
+ * the whole point on a page carrying 37 four-column option tables.
+ *
+ * NOT DONE, deliberately: a header that sticks to the page under the navbar.
+ * A `position: sticky` cell can only stick to its nearest scrollport, and any
+ * arrangement that guarantees a wide table cannot overflow makes some
+ * ancestor a scrollport. The alternative — forcing every table to fit with
+ * `overflow-wrap: anywhere` — was built and measured, and it shreds the
+ * content: `padding` renders as "paddi/ng", `undefined` as "undefine/d".
+ * Legible cells beat a sticky header. The header row is instead given real
+ * contrast (tinted fill, uppercase, its own rule) so it stays identifiable.
+ */
+
+.vp-doc .cc-table {
+  position: relative;
+  margin: 26px 0;
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius);
+  background-color: var(--vp-c-bg);
+  box-shadow: var(--cc-shadow-sm);
+}
+
+.vp-doc .cc-table__scroll {
+  display: flex;
+  border-radius: inherit;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.vp-doc .cc-table table {
+  display: table;
+  flex: 1 0 auto;
+  width: 100%;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-doc .cc-table th,
+.vp-doc .cc-table td {
+  border: 0;
+  box-shadow: inset 0 -1px 0 var(--vp-c-divider);
+  padding: 11px 13px;
+  font-size: 14px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: break-word;
+}
+
+/*
+ * Denser chips inside tables. A reference row is mostly code, and the chip's
+ * padding is multiplied by every column: trimming it is what decides whether
+ * a four-column table lays out inside the reading column or has to scroll.
+ */
+.vp-doc .cc-table td code,
+.vp-doc .cc-table th code {
+  padding: 1px 5px;
+  font-size: 0.83em;
+  white-space: normal;
+}
+
+/*
+ * Auto layout hands all spare width to the column with the largest
+ * max-content — always the description — which starves the type column down
+ * to a couple of characters per line. These preferences restore workable
+ * proportions; they are hints, so a column whose content genuinely needs
+ * more still gets it. Scoped by `:has()` to four-column reference tables, so
+ * the two- and three-column tables (`Slot | Light | Dark`, `Input | Action`)
+ * keep pure auto sizing, which suits them far better.
+ */
+.vp-doc .cc-table table:has(th:nth-child(4)):not(:has(th:nth-child(5))) th:nth-child(1) {
+  width: 17%;
+}
+
+.vp-doc .cc-table table:has(th:nth-child(4)):not(:has(th:nth-child(5))) th:nth-child(2) {
+  width: 25%;
+}
+
+.vp-doc .cc-table table:has(th:nth-child(4)):not(:has(th:nth-child(5))) th:nth-child(3) {
+  width: 16%;
+}
+
+.vp-doc .cc-table th {
+  background-color: var(--cc-table-head);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--vp-c-text-2);
+}
+
+.vp-doc .cc-table thead tr:first-child th:first-child {
+  border-top-left-radius: calc(var(--cc-radius) - 1px);
+}
+
+.vp-doc .cc-table thead tr:first-child th:last-child {
+  border-top-right-radius: calc(var(--cc-radius) - 1px);
+}
+
+.vp-doc .cc-table td {
+  line-height: 1.62;
+  color: var(--vp-c-text-2);
+}
+
+.vp-doc .cc-table td:first-child {
+  color: var(--vp-c-text-1);
+}
+
+.vp-doc .cc-table tr {
+  background-color: transparent;
+  transition: background-color 0.15s ease;
+}
+
+.vp-doc .cc-table tbody tr:nth-child(2n) {
+  background-color: var(--vp-c-bg-soft);
+}
+
+.vp-doc .cc-table tbody tr:hover {
+  background-color: var(--cc-row-hover);
+}
+
+.vp-doc .cc-table tbody tr:last-child td {
+  box-shadow: none;
+}
+
+/* Below the tablet breakpoint a four-column table crushed to 340px is not a
+   table any more, so give it a floor and let the frame scroll. */
+@media (max-width: 767px) {
+  .vp-doc .cc-table table:has(th:nth-child(3)) {
+    min-width: 560px;
+  }
+
+  .vp-doc .cc-table th,
+  .vp-doc .cc-table td {
+    padding: 11px 12px;
+  }
+}
+
+/*
+ * The scroll affordance: a fade pinned to the visible right edge, shown only
+ * while there is actually more table to the right. `[data-cc-scrollable]` and
+ * `[data-cc-scroll-end]` are maintained by the theme (see Layout.vue) —
+ * without them the fade would either be a permanent lie on tables that fit,
+ * or absent on the ones that don't, and CSS alone cannot tell the two apart.
+ *
+ * It is a sticky flex item rather than an overlay on the frame because the
+ * rows carry their own zebra fill and paint over anything behind them.
+ */
+.vp-doc .cc-table[data-cc-scrollable]:not([data-cc-scroll-end]) .cc-table__scroll::after {
+  content: '';
+  position: sticky;
+  right: 0;
+  flex: none;
+  width: 28px;
+  margin-left: -28px;
+  border-radius: 0 var(--cc-radius) var(--cc-radius) 0;
+  background: linear-gradient(to left, var(--vp-c-bg) 18%, transparent);
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- */
+/* Custom containers (tip / warning / danger / details)              */
+/* ---------------------------------------------------------------- */
+
+.vp-doc .custom-block {
+  --cc-cb-accent: var(--vp-c-default-1);
+  --cc-cb-bg: var(--vp-c-default-soft);
+
+  margin: 26px 0;
+  border: 1px solid transparent;
+  border-radius: var(--cc-radius);
+  padding: 16px 18px 16px 20px;
+  background-color: var(--cc-cb-bg);
+  box-shadow: inset 3px 0 0 var(--cc-cb-accent);
+  line-height: 1.7;
+  /* Callouts carry primary ink: they are the paragraphs a reader must not
+     skim past, and text-2 over a tinted fill loses too much contrast. */
+  color: var(--vp-c-text-1);
+}
+
+.vp-doc .custom-block.tip {
+  --cc-cb-accent: var(--vp-c-tip-1);
+  --cc-cb-bg: var(--vp-c-tip-soft);
+}
+
+.vp-doc .custom-block.warning {
+  --cc-cb-accent: var(--vp-c-warning-1);
+  --cc-cb-bg: var(--vp-c-warning-soft);
+}
+
+.vp-doc .custom-block.danger,
+.vp-doc .custom-block.caution {
+  --cc-cb-accent: var(--vp-c-danger-1);
+  --cc-cb-bg: var(--vp-c-danger-soft);
+}
+
+.vp-doc .custom-block.important {
+  --cc-cb-accent: var(--vp-c-important-1);
+  --cc-cb-bg: var(--vp-c-important-soft);
+}
+
+.vp-doc .custom-block .custom-block-title {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--vp-c-text-1);
+}
+
+.vp-doc .custom-block .custom-block-title::before {
+  content: '';
+  display: inline-block;
+  margin-right: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--cc-cb-accent);
+  vertical-align: 0.14em;
+}
+
+.vp-doc .custom-block p {
+  margin: 10px 0;
+  max-width: none;
+  line-height: 1.7;
+}
+
+.vp-doc .custom-block p:last-child {
+  margin-bottom: 0;
+}
+
+.vp-doc .custom-block ul,
+.vp-doc .custom-block ol {
+  margin: 10px 0;
+  max-width: none;
+}
+
+.vp-doc .custom-block div[class*='language-'] {
+  margin: 12px 0;
+}
+
+.vp-doc .custom-block.details {
+  padding: 14px 18px 14px 20px;
+}
+
+.vp-doc .custom-block.details summary {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--vp-c-text-1);
+  cursor: pointer;
+  list-style: none;
+}
+
+.vp-doc .custom-block.details summary::-webkit-details-marker {
+  display: none;
+}
+
+.vp-doc .custom-block.details summary::before {
+  content: '';
+  display: inline-block;
+  margin-right: 10px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--cc-cb-accent);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  vertical-align: 0.1em;
+  transition: transform 0.2s ease;
+}
+
+.vp-doc .custom-block.details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.vp-doc .custom-block.details summary:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Live chart demos                                                  */
+/* ---------------------------------------------------------------- */
+
+.vp-doc .chart-demo {
+  margin: 26px 0;
+}
+
+/* ---------------------------------------------------------------- */
+/* Sidebar                                                           */
+/* ---------------------------------------------------------------- */
+
+.VPSidebar {
+  padding-bottom: 96px;
+}
+
+@media (min-width: 960px) {
+  .VPSidebar {
+    padding-top: 32px;
+  }
+}
+
+/* Section rules make ~60 links scannable at a glance. */
+.VPSidebar .group + .group {
+  border-top: 1px solid var(--vp-c-divider);
+  padding-top: 16px;
+}
+
+.VPSidebar .VPSidebarItem.level-0 {
+  padding-bottom: 18px;
+}
+
+/* Top-level group headers: eyebrow, not a shout. */
+.VPSidebar .VPSidebarItem.level-0 > .item > .text,
+.VPSidebar .VPSidebarItem.level-0 > .item > .link > .text {
+  padding-bottom: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+/* Nested group headers (the example categories) stay sentence case. */
+.VPSidebar .VPSidebarItem.level-1 > .item > .text {
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.005em;
+  color: var(--vp-c-text-2);
+}
+
+.VPSidebar .VPSidebarItem.level-1 .items,
+.VPSidebar .VPSidebarItem.level-2 .items,
+.VPSidebar .VPSidebarItem.level-3 .items {
+  margin-top: 2px;
+  border-left: 1px solid var(--vp-c-divider);
+  padding-left: 12px;
+}
+
+/* Link rows become hit targets with real hover/active feedback. */
+.VPSidebar .VPSidebarItem.is-link > .item > .link {
+  margin: 0 -10px;
+  border-radius: 8px;
+  padding: 0 10px;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.VPSidebar .VPSidebarItem.level-1.is-link > .item > .link:hover,
+.VPSidebar .VPSidebarItem.level-2.is-link > .item > .link:hover,
+.VPSidebar .VPSidebarItem.level-3.is-link > .item > .link:hover {
+  background-color: var(--vp-c-bg-soft);
+}
+
+.VPSidebar .VPSidebarItem.is-active > .item > .link {
+  background-color: var(--vp-c-brand-soft);
+}
+
+.VPSidebar .VPSidebarItem.is-active > .item .link > .text {
+  font-weight: 650;
+  color: var(--vp-c-brand-1);
+}
+
+.VPSidebar .VPSidebarItem .text {
+  padding: 5px 0;
+  line-height: 21px;
+  font-size: 13.5px;
+}
+
+/* The pill carries the active state, so the hairline indicator is noise. */
+.VPSidebar .VPSidebarItem .indicator {
+  display: none;
+}
+
+.VPSidebar .VPSidebarItem.is-link > .item > .link:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: -2px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Aside: "On this page"                                             */
+/* ---------------------------------------------------------------- */
+
+.VPDocAsideOutline .content {
+  border-left-color: var(--vp-c-divider);
+  padding-left: 14px;
+}
+
+.VPDocAsideOutline .outline-title {
+  margin-bottom: 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+.VPDocAsideOutline .outline-marker {
+  width: 2px;
+  border-radius: 2px;
+}
+
+.VPDocAsideOutline .outline-link {
+  line-height: 1.5;
+  padding: 5px 0;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: normal;
+  color: var(--vp-c-text-3);
+  transition: color 0.2s ease;
+}
+
+.VPDocAsideOutline .outline-link:hover {
+  color: var(--vp-c-text-1);
+}
+
+.VPDocAsideOutline .outline-link.active {
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
+}
+
+.VPDocAsideOutline .outline-link.nested {
+  padding-left: 12px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Page footer: edit link + prev/next cards                          */
+/* ---------------------------------------------------------------- */
+
+.VPDocFooter {
+  margin-top: 72px;
+}
+
+.VPDocFooter .prev-next {
+  border-top: 1px solid var(--vp-c-divider);
+  padding-top: 28px;
+  grid-row-gap: 12px;
+}
+
+@media (min-width: 640px) {
+  .VPDocFooter .prev-next {
+    grid-column-gap: 16px;
+  }
+}
+
+.VPDocFooter .pager-link {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius);
+  padding: 14px 18px 16px;
+  background-color: var(--vp-c-bg);
+  box-shadow: var(--cc-shadow-sm);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.VPDocFooter .pager-link:hover {
+  border-color: var(--vp-c-brand-1);
+  box-shadow: var(--cc-shadow);
+  transform: translateY(-2px);
+}
+
+.VPDocFooter .pager-link:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+.VPDocFooter .pager-link .desc {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+}
+
+.VPDocFooter .pager-link.prev .desc::before {
+  content: '←';
+  margin-right: 7px;
+  letter-spacing: 0;
+}
+
+.VPDocFooter .pager-link.next .desc::after {
+  content: '→';
+  margin-left: 7px;
+  letter-spacing: 0;
+}
+
+.VPDocFooter .pager-link .title {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--vp-c-text-1);
+}
+
+.VPDocFooter .pager-link:hover .title {
+  color: var(--vp-c-brand-1);
+}
+
+.VPDocFooter .edit-info {
+  padding-bottom: 22px;
+}
+
+.VPDocFooter .edit-link-button,
+.VPDocFooter .VPLastUpdated {
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------------- */
+/* Navbar + search                                                   */
+/* ---------------------------------------------------------------- */
+
+.VPNavBarTitle .title {
+  font-weight: 750;
+  letter-spacing: -0.015em;
+}
+
+.VPNavBarMenuLink {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.VPNavBarSearch .DocSearch-Button {
+  border: 1px solid var(--cc-border);
+  border-radius: 10px;
+  background-color: var(--vp-c-bg);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.VPNavBarSearch .DocSearch-Button:hover {
+  border-color: var(--vp-c-brand-1);
+  background-color: var(--vp-c-bg-soft);
+  box-shadow: none;
+}
+
+/* ---------------------------------------------------------------- */
+/* Site footer                                                       */
+/* ---------------------------------------------------------------- */
+
+.VPFooter {
+  border-top: 1px solid var(--vp-c-divider);
+}
+
+.VPFooter .message,
+.VPFooter .copyright {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--vp-c-text-3);
+}
+
+/* ---------------------------------------------------------------- */
+/* Motion + forced colors                                            */
+/* ---------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .VPDocFooter .pager-link:hover {
+    transform: none;
+  }
+
+  .vp-doc .custom-block.details summary::before,
+  .VPSidebar .VPSidebarItem.is-link > .item > .link,
+  .vp-doc .cc-table tr {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  /* The active sidebar pill and the container accent bar are both painted
+     backgrounds, which forced-colors discards — restore a real outline. */
+  .VPSidebar .VPSidebarItem.is-active > .item > .link {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .vp-doc .custom-block {
+    border-color: CanvasText;
+  }
+
+  .vp-doc div[class*='language-']::before {
+    box-shadow: none;
+    border-bottom: 1px solid CanvasText;
+  }
+
+  .vp-doc .cc-table,
+  .VPDocFooter .pager-link {
+    border-color: CanvasText;
+  }
+
+  .vp-doc ul > li::before {
+    background-color: CanvasText;
+    opacity: 1;
+  }
+}

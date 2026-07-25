@@ -1,6 +1,7 @@
 import DefaultTheme from 'vitepress/theme';
 import type { Theme } from 'vitepress';
 
+import Layout from './Layout.vue';
 import ChartDemo from './components/ChartDemo.vue';
 import DemoLine from './components/DemoLine.vue';
 import DemoAreaStacked from './components/DemoAreaStacked.vue';
@@ -71,9 +72,13 @@ import GalleryGrid from './components/gallery/GalleryGrid.vue';
 import GalleryCard from './components/gallery/GalleryCard.vue';
 
 import './custom.css';
+// Extends the same tokens across every documentation page; must load after
+// custom.css, which declares them.
+import './docs.css';
 
 export default {
   extends: DefaultTheme,
+  Layout,
   enhanceApp({ app }) {
     // Scroll-reveal opts IN via this class, so a no-JS render never ends up
     // with permanently invisible sections (see custom.css).

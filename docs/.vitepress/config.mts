@@ -190,6 +190,35 @@ export default defineConfig({
     },
   },
 
+  markdown: {
+    /**
+     * Wrap every markdown table in its own frame + scroller.
+     *
+     * VitePress's default makes the `<table>` itself the horizontal scroll
+     * container. That works, but it costs a sticky header — a `position:
+     * sticky` `<th>` can only stick to its nearest scrollport, and there the
+     * scrollport is the table. Moving the overflow out to a wrapper lets the
+     * table stay `display: table` and fit the column by wrapping cell text on
+     * desktop (so the header can stick to the page under the navbar), while
+     * the wrapper takes over as the scroller on narrow screens.
+     */
+    config: (md) => {
+      const renderToken = (tokens: unknown[], idx: number, options: unknown, self: any) =>
+        self.renderToken(tokens, idx, options);
+
+      md.renderer.rules.table_open = (tokens, idx, options, _env, self) =>
+        `<div class="cc-table"><div class="cc-table__scroll">${renderToken(
+          tokens,
+          idx,
+          options,
+          self,
+        )}`;
+
+      md.renderer.rules.table_close = (tokens, idx, options, _env, self) =>
+        `${renderToken(tokens, idx, options, self)}</div></div>`;
+    },
+  },
+
   vite: {
     ssr: {
       // Workspace-linked packages must be bundled for the SSR build.
