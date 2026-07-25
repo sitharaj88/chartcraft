@@ -124,6 +124,13 @@ createChart(el, {
 
 ## The events API
 
+Try it live — click a point (or `Tab` to the chart and press `Enter`) and
+watch the `pointclick` payloads land in the log:
+
+<ClientOnly>
+  <DemoEvents />
+</ClientOnly>
+
 ```ts
 interface ChartEventMap {
   pointenter: PointEvent;   // pointer or keyboard focus enters a datum

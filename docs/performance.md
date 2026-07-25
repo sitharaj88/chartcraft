@@ -58,6 +58,12 @@ downsample?: { enabled?: boolean; threshold?: number };
 Downsampling is render-side only: tooltips, events, the data table, and axis
 extents work against your full data. `null` gaps are preserved.
 
+Live — 50,000 points; toggle downsampling and compare the render time:
+
+<ClientOnly>
+  <DemoLargeData />
+</ClientOnly>
+
 ### Tuning the threshold
 
 The default of 5000 points per series is conservative — well below where
@@ -125,7 +131,7 @@ re-run; the data model does not.
 ## Large-data tips
 
 1. **Let downsampling work.** 100k-point series render smoothly at the
-   default threshold; see `examples/large-data.html`.
+   default threshold; see the [large-data example](examples/large-data.md).
 2. **One chart, not thirty series.** Above ~8 series, color stops
    distinguishing (the palette folds to "Other" for a reason) and per-series
    cost stacks. Small multiples read better and render cheaper.

@@ -130,6 +130,14 @@ Identity and value never depend on color perception alone:
   protanopia/deuteranopia/tritanopia simulation) — see
   [Theming](concepts/theming.md#why-the-order-must-not-change).
 
+Live example — for pie and donut charts the legend automatically lists each
+**slice's label** next to its color swatch, so slice identity never relies on
+color perception alone:
+
+<ClientOnly>
+  <DemoPieDonut />
+</ClientOnly>
+
 ## WCAG 2.2 mapping
 
 | Criterion | Level | How ChartCraft addresses it |

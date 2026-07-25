@@ -123,7 +123,13 @@ npm workspaces; packages live under `packages/`.
 npm install        # install all workspace dependencies
 npm run build      # build core + wrappers (tsup, ESM + CJS + .d.ts)
 npm test           # vitest across all packages
+npm run docs:dev   # docs site (VitePress) with live chart demos
+npm run docs:build # static docs site → docs/.vitepress/dist
 ```
+
+The docs site deploys to GitHub Pages automatically on push to `main`
+(`.github/workflows/deploy-docs.yml`) — enable **Settings → Pages → Source:
+GitHub Actions** in the repository once.
 
 The public API surface is defined by [`docs/api-contract.md`](docs/api-contract.md)
 — core implements it, wrappers consume it, docs document it. See

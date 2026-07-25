@@ -3,7 +3,7 @@
 Where ChartCraft goes after v0.1. Items are grouped by theme, not strictly
 ordered; the [API contract](api-contract.md) governs every addition — each of
 these lands as a contract change first, then core, then wrappers, then docs
-(see [CONTRIBUTING.md](../CONTRIBUTING.md)).
+(see `CONTRIBUTING.md` in the repository root).
 
 ## Renderers
 

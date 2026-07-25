@@ -24,6 +24,13 @@ Switching at runtime is just an update:
 chart.update({ theme: 'dark' });
 ```
 
+Below, both built-in themes rendered live, pinned side by side — these two
+deliberately ignore the site's dark-mode toggle:
+
+<ClientOnly>
+  <DemoThemes />
+</ClientOnly>
+
 Note that dark mode is **not** an automatic inversion of light. Every dark
 value — palette slots included — was selected and re-validated against the
 dark surface. That is why `categoricalPalette` has separate `light` and `dark`

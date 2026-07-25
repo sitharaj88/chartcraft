@@ -50,6 +50,13 @@ user's `prefers-color-scheme` (`theme: 'auto'`).
 `createChart(container, options)` returns a [`Chart`](api/core.md#the-chart-instance)
 instance — keep a reference to it; it is how you update, listen, and clean up.
 
+Here is a live ChartCraft chart, rendered by this site with the same options
+API (more on the [examples pages](examples/index.md)):
+
+<ClientOnly>
+  <DemoLine />
+</ClientOnly>
+
 ## Your first chart (React)
 
 The React wrapper spreads `ChartOptions` as props and adds `className`,
