@@ -2,7 +2,6 @@ import DefaultTheme from 'vitepress/theme';
 import type { Theme } from 'vitepress';
 
 import ChartDemo from './components/ChartDemo.vue';
-import DemoHero from './components/DemoHero.vue';
 import DemoLine from './components/DemoLine.vue';
 import DemoAreaStacked from './components/DemoAreaStacked.vue';
 import DemoBarGrouped from './components/DemoBarGrouped.vue';
@@ -54,13 +53,33 @@ import DemoAnnotations from './components/DemoAnnotations.vue';
 import DemoZoom from './components/DemoZoom.vue';
 import DemoExport from './components/DemoExport.vue';
 
+// Landing page
+import HomePage from './components/home/HomePage.vue';
+import HomeHero from './components/home/HomeHero.vue';
+import HeroShowcase from './components/home/HeroShowcase.vue';
+import HomeStats from './components/home/HomeStats.vue';
+import HomeSection from './components/home/HomeSection.vue';
+import HomeTypes from './components/home/HomeTypes.vue';
+import HomeA11y from './components/home/HomeA11y.vue';
+import HomePerf from './components/home/HomePerf.vue';
+import HomePalette from './components/home/HomePalette.vue';
+import HomeFrameworks from './components/home/HomeFrameworks.vue';
+import HomeCode from './components/home/HomeCode.vue';
+import HomeCta from './components/home/HomeCta.vue';
+// Gallery
+import GalleryGrid from './components/gallery/GalleryGrid.vue';
+import GalleryCard from './components/gallery/GalleryCard.vue';
+
 import './custom.css';
 
 export default {
   extends: DefaultTheme,
   enhanceApp({ app }) {
+    // Scroll-reveal opts IN via this class, so a no-JS render never ends up
+    // with permanently invisible sections (see custom.css).
+    if (typeof document !== 'undefined') document.documentElement.classList.add('cc-js');
+
     app.component('ChartDemo', ChartDemo);
-    app.component('DemoHero', DemoHero);
     app.component('DemoLine', DemoLine);
     app.component('DemoAreaStacked', DemoAreaStacked);
     app.component('DemoBarGrouped', DemoBarGrouped);
@@ -111,5 +130,21 @@ export default {
     app.component('DemoAnnotations', DemoAnnotations);
     app.component('DemoZoom', DemoZoom);
     app.component('DemoExport', DemoExport);
+    // Landing page
+    app.component('HomePage', HomePage);
+    app.component('HomeHero', HomeHero);
+    app.component('HeroShowcase', HeroShowcase);
+    app.component('HomeStats', HomeStats);
+    app.component('HomeSection', HomeSection);
+    app.component('HomeTypes', HomeTypes);
+    app.component('HomeA11y', HomeA11y);
+    app.component('HomePerf', HomePerf);
+    app.component('HomePalette', HomePalette);
+    app.component('HomeFrameworks', HomeFrameworks);
+    app.component('HomeCode', HomeCode);
+    app.component('HomeCta', HomeCta);
+    // Gallery
+    app.component('GalleryGrid', GalleryGrid);
+    app.component('GalleryCard', GalleryCard);
   },
 } satisfies Theme;

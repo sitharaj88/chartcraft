@@ -1,10 +1,10 @@
 /**
- * ChartCraft docs branding.
+ * ChartCraft docs branding + landing/gallery design system.
  *
  * Brand colors come from the library's own validated palette:
  * slot 1 blue (#2a78d6 light / #3987e5 dark) with the sequential-ramp
  * steps #256abf / #1c5cab as hover / active shades, and slot 7 violet
- * (#4a3aa7) as the hero gradient partner. Typography stays default.
+ * (#4a3aa7) as the gradient partner.
  */
 
 :root {
@@ -38,7 +38,48 @@
 }
 
 /* ---------------------------------------------------------------- */
-/* Live demo containers                                             */
+/* Design tokens                                                     */
+/* ---------------------------------------------------------------- */
+
+:root {
+  --cc-max: 1200px;
+  --cc-radius: 12px;
+  --cc-radius-lg: 20px;
+
+  --cc-grad: linear-gradient(135deg, #2a78d6 0%, #4a3aa7 100%);
+  --cc-grad-text: linear-gradient(120deg, #2a78d6 20%, #4a3aa7);
+  --cc-grad-wash: radial-gradient(
+      ellipse 80% 60% at 12% -10%,
+      rgba(42, 120, 214, 0.16),
+      transparent 60%
+    ),
+    radial-gradient(ellipse 70% 60% at 92% 0%, rgba(74, 58, 167, 0.14), transparent 62%);
+
+  --cc-surface: var(--vp-c-bg);
+  --cc-surface-2: var(--vp-c-bg-soft);
+  --cc-border: var(--vp-c-divider);
+
+  --cc-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --cc-shadow: 0 2px 4px rgba(16, 24, 40, 0.04), 0 12px 28px -14px rgba(16, 24, 40, 0.3);
+  --cc-shadow-lg: 0 4px 10px rgba(16, 24, 40, 0.05), 0 32px 60px -26px rgba(16, 24, 40, 0.4);
+}
+
+.dark {
+  --cc-grad-text: linear-gradient(120deg, #6ea8ee 20%, #9085e9);
+  --cc-grad-wash: radial-gradient(
+      ellipse 80% 60% at 12% -10%,
+      rgba(57, 135, 229, 0.16),
+      transparent 60%
+    ),
+    radial-gradient(ellipse 70% 60% at 92% 0%, rgba(144, 133, 233, 0.13), transparent 62%);
+
+  --cc-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --cc-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.75);
+  --cc-shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.35), 0 32px 60px -26px rgba(0, 0, 0, 0.85);
+}
+
+/* ---------------------------------------------------------------- */
+/* Live demo containers (used by every examples/feature page)        */
 /* ---------------------------------------------------------------- */
 
 .chart-demo {
@@ -57,21 +98,248 @@
   height: 100%;
 }
 
-/* Landing-page hero demo container */
-.home-demo {
-  max-width: 1152px;
-  margin: 0 auto;
-  padding: 0 24px 24px;
+/* ---------------------------------------------------------------- */
+/* Landing page primitives                                           */
+/* ---------------------------------------------------------------- */
+
+.cc-home {
+  --cc-gap: 24px;
+  overflow-x: clip;
 }
 
-@media (min-width: 640px) {
-  .home-demo {
-    padding: 0 48px 32px;
+.cc-wrap {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--cc-max);
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+@media (min-width: 768px) {
+  .cc-wrap {
+    padding: 0 40px;
   }
 }
 
-@media (min-width: 960px) {
-  .home-demo {
-    padding: 0 64px 40px;
+.cc-section {
+  padding: 64px 0;
+}
+
+@media (min-width: 768px) {
+  .cc-section {
+    padding: 88px 0;
+  }
+}
+
+.cc-section--tint {
+  background-color: var(--vp-c-bg-soft);
+  border-top: 1px solid var(--cc-border);
+  border-bottom: 1px solid var(--cc-border);
+}
+
+.cc-eyebrow {
+  display: inline-block;
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vp-c-brand-1);
+}
+
+.cc-h2 {
+  margin: 0;
+  font-size: clamp(1.75rem, 1.15rem + 2.2vw, 2.6rem);
+  line-height: 1.15;
+  letter-spacing: -0.022em;
+  font-weight: 750;
+  color: var(--vp-c-text-1);
+}
+
+.cc-lede {
+  margin: 16px 0 0;
+  max-width: 62ch;
+  font-size: clamp(1rem, 0.96rem + 0.2vw, 1.125rem);
+  line-height: 1.65;
+  color: var(--vp-c-text-2);
+}
+
+.cc-gradient-text {
+  background: var(--cc-grad-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Buttons ---------------------------------------------------------- */
+
+.cc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  padding: 0 22px;
+  height: 48px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease,
+    border-color 0.18s ease, color 0.18s ease;
+}
+
+.cc-btn--primary {
+  background: var(--cc-grad);
+  color: #fff;
+  box-shadow: 0 10px 24px -12px rgba(42, 120, 214, 0.9);
+}
+
+.cc-btn--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 30px -12px rgba(42, 120, 214, 0.95);
+  color: #fff;
+}
+
+.cc-btn--alt {
+  background-color: var(--vp-c-bg);
+  border-color: var(--cc-border);
+  color: var(--vp-c-text-1);
+  box-shadow: var(--cc-shadow-sm);
+}
+
+.cc-btn--alt:hover {
+  transform: translateY(-2px);
+  border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+}
+
+.cc-btn--ghost {
+  padding: 0 14px;
+  height: 48px;
+  color: var(--vp-c-text-2);
+}
+
+.cc-btn--ghost:hover {
+  color: var(--vp-c-brand-1);
+}
+
+.cc-btn:focus-visible,
+.cc-chip:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+/* Chips ------------------------------------------------------------ */
+
+.cc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cc-chip {
+  padding: 7px 14px;
+  border: 1px solid var(--cc-border);
+  border-radius: 999px;
+  background-color: var(--vp-c-bg);
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  /*
+   * `color` is deliberately NOT transitioned. The pressed state paints white
+   * text on a gradient BACKGROUND-IMAGE, which disappears instantly when the
+   * state drops — a transitioning colour would spend that time as white text
+   * on a white chip, i.e. an unreadable label.
+   */
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.cc-chip:hover {
+  border-color: var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+}
+
+.cc-chip[aria-pressed='true'],
+.cc-chip.is-active {
+  border-color: transparent;
+  background: var(--cc-grad);
+  color: #fff;
+}
+
+/* Cards ------------------------------------------------------------ */
+
+.cc-card {
+  box-sizing: border-box;
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-radius);
+  background-color: var(--cc-surface);
+  box-shadow: var(--cc-shadow);
+}
+
+/*
+ * Scroll reveal.
+ *
+ * Gated on `.cc-js`, which the theme adds to <html> at runtime: without
+ * scripting there is nothing to add `.cc-in` later, so an ungated
+ * `opacity: 0` would leave half the landing page permanently invisible.
+ */
+.cc-js [data-cc-reveal] {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.cc-js [data-cc-reveal].cc-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cc-js [data-cc-reveal] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+
+  .cc-btn:hover,
+  .cc-gallery__card:hover {
+    transform: none;
+  }
+}
+
+/* Forced colors: never rely on the gradient to carry meaning. */
+@media (forced-colors: active) {
+  .cc-btn--primary,
+  .cc-chip[aria-pressed='true'] {
+    background: ButtonFace;
+    color: ButtonText;
+    border-color: ButtonText;
+  }
+
+  .cc-gradient-text {
+    color: CanvasText;
+    background: none;
+  }
+}
+
+/* ---------------------------------------------------------------- */
+/* Gallery page: let the grid use the width it needs                 */
+/* ---------------------------------------------------------------- */
+
+.VPDoc:has(.cc-gallery) .content {
+  max-width: 100%;
+}
+
+@media (min-width: 1440px) {
+  .VPDoc:has(.cc-gallery) .container {
+    max-width: 1200px;
   }
 }
