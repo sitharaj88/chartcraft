@@ -33,7 +33,7 @@ import { withBase } from 'vitepress';
           <a class="cc-btn cc-btn--alt" :href="withBase('/examples/')">See all 39 charts</a>
           <a
             class="cc-btn cc-btn--ghost"
-            href="https://github.com/OWNER/charts"
+            href="https://github.com/sitharaj88/chartcraft"
             rel="noreferrer"
           >
             <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">

@@ -182,7 +182,7 @@ export default defineConfig({
 
     outline: { level: [2, 3] },
 
-    socialLinks: [{ icon: 'github', link: 'https://github.com/OWNER/charts' }],
+    socialLinks: [{ icon: 'github', link: 'https://github.com/sitharaj88/chartcraft' }],
 
     footer: {
       message: 'Released under the MIT License.',

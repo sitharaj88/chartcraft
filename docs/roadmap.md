@@ -15,7 +15,7 @@ gantt, choropleth and network. Every one ships with the full shared feature set
 reduced motion, resize — and its own [example page](examples/index.md) with an
 honest "when *not* to use this" section.
 
-**Audit-driven hardening.** An adversarial [quality audit](https://github.com/OWNER/charts/blob/main/QUALITY-AUDIT.md)
+**Audit-driven hardening.** An adversarial [quality audit](https://github.com/sitharaj88/chartcraft/blob/main/QUALITY-AUDIT.md)
 of all 39 types drove a round of fixes that shipped in 0.3: the accessible table
 and `exportData()` now carry the **full** series rather than the downsampled
 render set; sequential ramps are scheme-aware, so the highest-magnitude cell
