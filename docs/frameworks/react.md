@@ -58,8 +58,11 @@ Lifecycle mapping:
 
 ## Per-type convenience components
 
-`LineChart`, `AreaChart`, `BarChart`, `ScatterChart`, `PieChart`,
-`DonutChart` — identical props minus `type`:
+One per chart type — identical props minus `type`: `LineChart`, `AreaChart`,
+`BarChart`, `ScatterChart`, `PieChart`, `DonutChart`, and (v0.2)
+`BubbleChart`, `SparklineChart`, `HistogramChart`, `BoxplotChart`,
+`CandlestickChart`, `OhlcChart`, `WaterfallChart`, `HeatmapChart`,
+`TreemapChart`, `SunburstChart`, `FunnelChart`, `RadarChart`, `GaugeChart`:
 
 ```tsx
 import { AreaChart } from '@chartcraft/react';

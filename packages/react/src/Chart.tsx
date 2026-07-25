@@ -106,6 +106,10 @@ function ChartImpl(props: ChartProps, ref: ForwardedRef<ChartInstance>): ReactEl
     options.animation,
     options.downsample,
     options.a11y,
+    options.histogram,
+    options.heatmap,
+    options.gauge,
+    options.waterfall,
   ]);
 
   return <div ref={containerRef} className={className} style={style} />;
@@ -132,3 +136,17 @@ export const BarChart = typedChart('bar', 'BarChart');
 export const ScatterChart = typedChart('scatter', 'ScatterChart');
 export const PieChart = typedChart('pie', 'PieChart');
 export const DonutChart = typedChart('donut', 'DonutChart');
+// v0.2 chart types
+export const BubbleChart = typedChart('bubble', 'BubbleChart');
+export const SparklineChart = typedChart('sparkline', 'SparklineChart');
+export const HistogramChart = typedChart('histogram', 'HistogramChart');
+export const BoxplotChart = typedChart('boxplot', 'BoxplotChart');
+export const CandlestickChart = typedChart('candlestick', 'CandlestickChart');
+export const OhlcChart = typedChart('ohlc', 'OhlcChart');
+export const WaterfallChart = typedChart('waterfall', 'WaterfallChart');
+export const HeatmapChart = typedChart('heatmap', 'HeatmapChart');
+export const TreemapChart = typedChart('treemap', 'TreemapChart');
+export const SunburstChart = typedChart('sunburst', 'SunburstChart');
+export const FunnelChart = typedChart('funnel', 'FunnelChart');
+export const RadarChart = typedChart('radar', 'RadarChart');
+export const GaugeChart = typedChart('gauge', 'GaugeChart');

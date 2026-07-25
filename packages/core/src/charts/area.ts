@@ -9,13 +9,15 @@ import { MARKER_RADIUS, MARKER_RING, markersVisible } from './line';
 
 export const AREA_FILL_ALPHA = 0.24;
 
-export function renderArea(ctx: RenderContext): void {
-  const { r, theme, model, layout, pos, hover } = ctx;
+export function renderAreaKind(ctx: RenderContext, indices: readonly number[]): void {
+  const { r, theme, model, layout, geom, hover } = ctx;
+  const pos = geom.pos;
   r.clipRect(layout.plot.x, layout.plot.y - MARKER_RADIUS - 2, layout.plot.w, layout.plot.h + 2 * (MARKER_RADIUS + 2), () => {
-    model.series.forEach((s, si) => {
-      if (!s.visible) return;
+    for (const si of indices) {
+      const s = model.series[si];
+      if (!s || !s.visible) continue;
       const pts = pos[si];
-      if (!pts || pts.length === 0) return;
+      if (!pts || pts.length === 0) continue;
       const color = seriesColor(s, theme);
       const fill = areaPath(pts, s.curve);
       if (fill.length > 0) r.path(fill, { fill: color, alpha: AREA_FILL_ALPHA });
@@ -41,6 +43,6 @@ export function renderArea(ctx: RenderContext): void {
           });
         }
       }
-    });
+    }
   });
 }

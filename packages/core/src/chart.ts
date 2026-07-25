@@ -3,9 +3,15 @@
  * Pipeline: normalize options -> build data model -> compute scales/layout ->
  * render. update() deep-merges, diffs, and re-runs only the affected stages.
  * Animation interpolates between retained models; renders driven by rAF.
+ *
+ * v0.2: chart.ts contains NO per-type branching. Every per-type
+ * responsibility (layout geometry, rendering, hit-testing, legend items,
+ * a11y table rows, keyboard geometry, tooltip extraction, option policy)
+ * is dispatched through the chart-type registry (src/charts/registry.ts).
+ * The pipeline keeps ownership of scales/axes building, animation, DOM,
+ * events and the a11y scaffolding.
  */
 import type {
-  AxisOptions,
   Chart,
   ChartData,
   ChartEventMap,
@@ -16,6 +22,7 @@ import type {
 } from './types';
 import { Emitter } from './events';
 import {
+  bandIndexFor,
   buildModel,
   resolveOptions,
   seriesColor,
@@ -25,27 +32,29 @@ import {
 import { resolveTheme, watchColorScheme } from './theme';
 import { CanvasRenderer } from './render/canvas';
 import type { Renderer } from './render/renderer';
-import { LinearScale } from './scales/linear';
-import { TimeScale } from './scales/time';
-import { BandScale } from './scales/band';
-import { LogScale } from './scales/log';
-import type { ContinuousScale, HoverState, Layout, PieSlice, PointPos, Rect, Tick } from './layout';
+import {
+  computeCartesianLayout,
+  computePlainLayout,
+  formatCategory,
+  type HoverState,
+  type Layout,
+  type PieSlice,
+  type PointPos,
+  type RenderContext,
+  type TypeGeom,
+} from './layout';
 import { drawGrid } from './components/grid';
-import { drawAxes, tickFont } from './components/axis';
-import { Legend, type LegendItem } from './components/legend';
+import { drawAxes } from './components/axis';
+import { Legend } from './components/legend';
 import { Tooltip, defaultTooltipHTML } from './components/tooltip';
-import { renderLine } from './charts/line';
-import { renderArea } from './charts/area';
-import { renderBar, BAR_GAP } from './charts/bar';
-import { renderScatter } from './charts/scatter';
-import { computeSliceMeta, computeSlices, renderPie, START_ANGLE } from './charts/pie';
-import { indicesAtX, nearestByX, nearestPoint, sliceAt, HIT_RADIUS } from './interaction/hittest';
+import { getChartType, type ChartTypeDefinition, type GeomContext } from './charts/registry';
+import { START_ANGLE } from './charts/pie';
 import { Announcer, buildDataTable, generateAriaLabel, visuallyHide } from './a11y';
 import { navigate, type NavPosition } from './a11y/keyboard';
 import { Animator, lerp, prefersReducedMotion } from './animation';
-import { caf, clamp, deepMerge, formatDate, formatNumber, formatValue, raf, uid } from './util';
+import { caf, deepMerge, formatValue, raf, uid } from './util';
 
-export const version = '0.1.0';
+export const version = '0.2.0';
 
 type RenderReason = ChartEventMap['render']['reason'];
 
@@ -73,8 +82,7 @@ class ChartImpl implements Chart {
   private theme: Theme;
   private model: DataModel;
   private layoutState!: Layout;
-  private pos: (PointPos | null)[][] = [];
-  private slices: PieSlice[] | null = null;
+  private geom: TypeGeom = { pos: [], slices: null, bars: null };
 
   private paletteSlots = new Map<string, number>();
   private emitter = new Emitter<ChartEventMap>();
@@ -170,6 +178,27 @@ class ChartImpl implements Chart {
     this.refresh('init', false);
   }
 
+  /** The chart-type definition for the current resolved type. */
+  private get def(): ChartTypeDefinition {
+    return getChartType(this.opts.type);
+  }
+
+  /** Whether the pipeline draws grid + axes for the current type. */
+  private get axisChrome(): boolean {
+    const needs = this.def.needs;
+    return needs.cartesianAxes && (needs.axisChrome ?? true);
+  }
+
+  private geomContext(): GeomContext {
+    return {
+      opts: this.opts,
+      theme: this.theme,
+      model: this.model,
+      layout: this.layoutState,
+      geom: this.geom,
+    };
+  }
+
   // -------------------------------------------------------------- public API
 
   update(partial: Partial<ChartOptions>): void {
@@ -252,11 +281,11 @@ class ChartImpl implements Chart {
     const prevPosById = new Map<string, (PointPos | null)[]>();
     if (this.model) {
       this.model.series.forEach((s, si) => {
-        const p = this.pos[si];
+        const p = this.geom.pos[si];
         if (p) prevPosById.set(s.id, p);
       });
     }
-    const prevSlices = this.slices;
+    const prevSlices = this.geom.slices;
     const hadPrev = this.lastSize !== null;
 
     if (modelDirty || !this.model) {
@@ -272,8 +301,8 @@ class ChartImpl implements Chart {
     const duration = anim.enabled && animate && !prefersReducedMotion() ? anim.duration : 0;
 
     if (duration > 0 && reason !== 'resize') {
-      const targetPos = this.pos;
-      const targetSlices = this.slices;
+      const targetPos = this.geom.pos;
+      const targetSlices = this.geom.slices;
       const frame = (t: number) => {
         if (this.destroyed) return;
         this.drawFrame(
@@ -287,7 +316,7 @@ class ChartImpl implements Chart {
       });
     } else {
       this.animator.cancel();
-      this.drawFrame(this.pos, this.slices);
+      this.drawFrame(this.geom.pos, this.geom.slices);
     }
     this.emitter.emit('render', { reason });
   }
@@ -349,266 +378,30 @@ class ChartImpl implements Chart {
   }
 
   private computeLayout(): void {
-    const o = this.opts;
-    const t = this.theme;
-    const m = this.model;
     const { width, height } = this.measuredSize();
-    const pad = o.padding;
     const topExtra = this.topExtra();
-    const isPie = m.type === 'pie' || m.type === 'donut';
+    const measure = (text: string, font: string): number => this.renderer.measure(text, font);
 
-    if (isPie) {
-      const plot: Rect = {
-        x: pad.left,
-        y: pad.top + topExtra,
-        w: Math.max(10, width - pad.left - pad.right),
-        h: Math.max(10, height - pad.top - topExtra - pad.bottom),
-      };
-      this.layoutState = {
-        width,
-        height,
-        plot,
-        xScale: null,
-        yScale: null,
-        xTicks: [],
-        yTicks: [],
-        band: null,
-        baselinePx: plot.y + plot.h,
-      };
-      this.slices = computeSlices(m, plot, t);
-      this.pos = m.series.map(() => []);
-      return;
-    }
+    this.layoutState = this.def.needs.cartesianAxes
+      ? computeCartesianLayout({
+          width,
+          height,
+          topExtra,
+          opts: this.opts,
+          model: this.model,
+          theme: this.theme,
+          measure,
+          axisChrome: this.axisChrome,
+        })
+      : computePlainLayout({ width, height, topExtra, padding: this.opts.padding });
 
-    this.slices = null;
-    const horizontal = m.horizontal;
-    const font = tickFont(t);
-
-    // ---- Value axis (left when vertical, bottom when horizontal).
-    const valueAxis = horizontal ? o.xAxis : o.yAxis;
-    const { scale: valueScale, tickValues: valueTickValues } = this.makeValueScale(m.yDomain, valueAxis, m.type);
-    const valueFormat = valueAxis.ticks?.format ?? ((v: number | Date | string) => formatNumber(v as number));
-
-    // ---- Category / continuous x axis.
-    const catAxis = horizontal ? o.yAxis : o.xAxis;
-    let band: BandScale | null = null;
-    let xCont: ContinuousScale | null = null;
-    let xSpanMs = 0;
-    if (m.xType === 'category') {
-      band = new BandScale(m.categories ?? []);
-      if (m.type === 'bar') band.padding(0.25, 0.15);
-      else band.padding(0.6, 0.3);
-    } else {
-      let [lo, hi] = m.xDomain ?? [0, 1];
-      if (typeof o.xAxis.min === 'number') lo = o.xAxis.min;
-      if (typeof o.xAxis.max === 'number') hi = o.xAxis.max;
-      xCont = m.xType === 'time' ? new TimeScale([lo, hi]) : m.xType === 'log' ? new LogScale([lo, hi]) : new LinearScale([lo, hi]);
-      xSpanMs = Math.abs(hi - lo);
-    }
-
-    // ---- Margins (left labels measured before ranges are known).
-    const leftLabels: string[] = horizontal
-      ? (m.categories ?? []).map((c) => this.formatCategory(c, catAxis))
-      : valueTickValues.map((v) => valueFormat(v));
-    let maxLeft = 0;
-    for (const s of leftLabels) maxLeft = Math.max(maxLeft, this.renderer.measure(s, font));
-    const leftW = Math.ceil(maxLeft) + 14 + (o.yAxis.label ? t.fontSize + 10 : 0);
-    const bottomH = t.fontSize + 10 + (o.xAxis.label ? t.fontSize + 8 : 0);
-
-    const plot: Rect = {
-      x: pad.left + leftW,
-      y: pad.top + topExtra,
-      w: Math.max(10, width - pad.left - leftW - pad.right),
-      h: Math.max(10, height - pad.top - topExtra - bottomH - pad.bottom),
-    };
-
-    // ---- Assign ranges.
-    let xTicks: Tick[] = [];
-    let yTicks: Tick[] = [];
-    let bandLayout: Layout['band'] = null;
-    let baselinePx: number;
-
-    const setValueTicks = (ticks: number[], toPx: (v: number) => number): Tick[] =>
-      ticks.map((v) => ({ pos: toPx(v), label: valueFormat(v) }));
-
-    if (!horizontal) {
-      // Bottom = x data axis, left = value axis.
-      valueScale.range([plot.y + plot.h, plot.y]);
-      yTicks = setValueTicks(valueTickValues, (v) => valueScale.scale(v));
-      if (band) {
-        band.range([plot.x, plot.x + plot.w]);
-        xTicks = this.bandTicks(band, plot.w, catAxis);
-      } else if (xCont) {
-        xCont.range([plot.x, plot.x + plot.w]);
-        xTicks = this.continuousXTicks(xCont, plot.w, o.xAxis, xSpanMs);
-      }
-      baselinePx = clamp(valueScale.scale(0), plot.y, plot.y + plot.h);
-      this.layoutState = {
-        width,
-        height,
-        plot,
-        xScale: band ?? xCont,
-        yScale: valueScale,
-        xTicks,
-        yTicks,
-        band: null,
-        baselinePx,
-      };
-    } else {
-      // Horizontal bars: bottom = value axis, left = band axis.
-      valueScale.range([plot.x, plot.x + plot.w]);
-      xTicks = setValueTicks(valueTickValues, (v) => valueScale.scale(v));
-      const b = band ?? new BandScale(m.categories ?? []);
-      b.range([plot.y, plot.y + plot.h]);
-      yTicks = (m.categories ?? []).map((c, i) => ({
-        pos: b.center(i),
-        label: this.formatCategory(c, catAxis),
-      }));
-      baselinePx = clamp(valueScale.scale(0), plot.x, plot.x + plot.w);
-      band = b;
-      this.layoutState = {
-        width,
-        height,
-        plot,
-        xScale: valueScale,
-        yScale: b,
-        xTicks,
-        yTicks,
-        band: null,
-        baselinePx,
-      };
-    }
-
-    // ---- Bar geometry.
-    if (m.type === 'bar' && band) {
-      const visibleCount = Math.max(1, m.series.filter((s) => s.visible).length);
-      const bw = band.bandwidth();
-      const slots = m.stacked ? 1 : visibleCount;
-      const slotW = Math.max(1, (bw - BAR_GAP * (slots - 1)) / slots);
-      const offsets: number[] = [];
-      for (let k = 0; k < slots; k++) offsets.push(k * (slotW + BAR_GAP));
-      bandLayout = { scale: band, barW: slotW, offsets };
-      this.layoutState.band = bandLayout;
-    }
-
-    this.computePositions();
-  }
-
-  private makeValueScale(
-    domain: [number, number],
-    axis: AxisOptions,
-    chartType: string,
-  ): { scale: ContinuousScale; tickValues: number[] } {
-    const count = axis.ticks?.count ?? 5;
-    let [lo, hi] = domain;
-    const explicitMin = typeof axis.min === 'number';
-    const explicitMax = typeof axis.max === 'number';
-    if (explicitMin) lo = axis.min as number;
-    if (explicitMax) hi = axis.max as number;
-
-    if (axis.type === 'log') {
-      const scale = new LogScale([lo, hi]);
-      if (!explicitMin || !explicitMax) {
-        const nice = new LogScale([lo, hi]).nice().domain();
-        scale.domain([explicitMin ? lo : nice[0], explicitMax ? hi : nice[1]]);
-      }
-      return { scale, tickValues: scale.ticks(count) };
-    }
-    const scale = new LinearScale([lo, hi]);
-    if (!explicitMin || !explicitMax) {
-      const nice = new LinearScale([lo, hi]).nice(count).domain();
-      scale.domain([explicitMin ? lo : nice[0], explicitMax ? hi : nice[1]]);
-    }
-    void chartType;
-    return { scale, tickValues: scale.ticks(count) };
-  }
-
-  private formatCategory(c: string | number | Date, axis: AxisOptions): string {
-    const fmt = axis.ticks?.format;
-    if (fmt) return fmt(c instanceof Date ? c : c);
-    return formatValue(c);
-  }
-
-  private bandTicks(band: BandScale, plotW: number, axis: AxisOptions): Tick[] {
-    const cats = band.ticks();
-    const maxLabels = Math.max(1, Math.floor(plotW / 56));
-    const stride = axis.ticks?.count ? Math.max(1, Math.ceil(cats.length / axis.ticks.count)) : Math.max(1, Math.ceil(cats.length / maxLabels));
-    const out: Tick[] = [];
-    cats.forEach((c, i) => {
-      if (i % stride !== 0) return;
-      out.push({ pos: band.center(i), label: this.formatCategory(c, axis) });
+    this.geom = this.def.layout({
+      opts: this.opts,
+      theme: this.theme,
+      model: this.model,
+      layout: this.layoutState,
+      measure,
     });
-    return out;
-  }
-
-  private continuousXTicks(scale: ContinuousScale, plotW: number, axis: AxisOptions, spanMs: number): Tick[] {
-    const count = axis.ticks?.count ?? Math.max(2, Math.floor(plotW / 80));
-    const fmt = axis.ticks?.format;
-    if (scale instanceof TimeScale) {
-      return scale.timeTicks(count).map((d) => ({
-        pos: scale.scale(d.getTime()),
-        label: fmt ? fmt(d) : formatDate(d, spanMs),
-      }));
-    }
-    return scale.ticks(count).map((v) => ({
-      pos: scale.scale(v),
-      label: fmt ? fmt(v) : formatNumber(v),
-    }));
-  }
-
-  private computePositions(): void {
-    const m = this.model;
-    const L = this.layoutState;
-    const horizontal = m.horizontal;
-    let slotIndex = -1;
-
-    this.pos = m.series.map((s) => {
-      if (!s.visible) return [];
-      slotIndex += 1;
-      const slot = m.stacked ? 0 : slotIndex;
-
-      if (m.type === 'bar' && L.band) {
-        const { scale: band, barW, offsets } = L.band;
-        const valueScale = (horizontal ? L.xScale : L.yScale) as ContinuousScale;
-        return s.points.map((p, pi) => {
-          const yTop = m.stacked ? (s.y1?.[pi] ?? null) : p.y;
-          if (yTop === null) return null;
-          const yBottom = m.stacked ? (s.y0?.[pi] ?? 0) : 0;
-          const bandIdx = this.bandIndexFor(p.xv, pi);
-          const centerAlongBand = band.scale(bandIdx) + (offsets[slot] ?? 0) + barW / 2;
-          const endPx = valueScale.scale(yTop);
-          const basePx = m.stacked ? valueScale.scale(yBottom ?? 0) : L.baselinePx;
-          return horizontal
-            ? { x: endPx, y: centerAlongBand, y0: basePx }
-            : { x: centerAlongBand, y: endPx, y0: basePx };
-        });
-      }
-
-      // line / area / scatter
-      const yScale = L.yScale as ContinuousScale | null;
-      if (!yScale) return [];
-      return s.points.map((p, pi) => {
-        const yVal = m.stacked ? (s.y1?.[pi] ?? null) : p.y;
-        if (yVal === null) return null;
-        let x: number;
-        if (m.xType === 'category') {
-          const band = L.xScale as BandScale;
-          x = band.center(this.bandIndexFor(p.xv, pi));
-        } else {
-          if (p.xv === null) return null;
-          x = (L.xScale as ContinuousScale).scale(p.xv);
-        }
-        const y = yScale.scale(yVal);
-        const y0 = m.stacked ? yScale.scale(s.y0?.[pi] ?? 0) : L.baselinePx;
-        return { x, y, y0 };
-      });
-    });
-  }
-
-  private bandIndexFor(xv: number | null, pi: number): number {
-    const n = this.model.categories?.length ?? 0;
-    if (xv !== null && Number.isInteger(xv) && xv >= 0 && (n === 0 || xv < n)) return xv;
-    return pi;
   }
 
   // -------------------------------------------------------------------- DOM
@@ -622,25 +415,17 @@ class ChartImpl implements Chart {
     this.root.style.background = t.surface;
     this.root.style.flexDirection = o.legend.position === 'right' ? 'row' : 'column';
 
-    // Legend mount order. Cartesian charts list series (toggleable); pie and
-    // donut list slices so slice identity never rides on color alone.
-    const legendItems: LegendItem[] =
-      o.type === 'pie' || o.type === 'donut'
-        ? computeSliceMeta(m, t).map((sl) => ({
-            id: `slice:${sl.pi}`,
-            name: sl.label,
-            color: sl.color,
-            visible: true,
-            toggleable: false,
-          }))
-        : m.series.map((s) => ({
-            id: s.id,
-            name: s.name,
-            color: seriesColor(s, t),
-            visible: s.visible,
-            toggleable: true,
-          }));
-    this.legend.update(legendItems, t, o.legend);
+    // Legend content comes from the type definition: item entries (series
+    // for cartesian charts, non-toggleable slices for pie/donut, ...) or a
+    // custom element (heatmap's gradient color scale) mounted in the items'
+    // place — the legend.show policy applies to both.
+    const legendCustom = this.def.legendCustomEl?.(this.geomContext(), doc) ?? null;
+    if (legendCustom) {
+      this.legend.update([], t, o.legend);
+      if (o.legend.show) this.legend.el.appendChild(legendCustom);
+    } else {
+      this.legend.update(this.def.legendItems(this.geomContext()), t, o.legend);
+    }
     if (o.legend.position === 'top') {
       if (this.root.firstChild !== this.legend.el) this.root.insertBefore(this.legend.el, this.wrap);
     } else {
@@ -674,10 +459,11 @@ class ChartImpl implements Chart {
       this.canvas.removeAttribute('aria-describedby');
     }
 
-    // Data table fallback.
+    // Data table fallback (content supplied by the type definition).
     this.tableWrap.textContent = '';
     if (o.a11y.table !== 'off') {
-      const table = buildDataTable(doc, m, o);
+      const spec = this.def.a11yTable(this.geomContext());
+      const table = buildDataTable(doc, o.title ?? generateAriaLabel(o, m), spec);
       if (o.a11y.table === 'hidden') {
         visuallyHide(this.tableWrap);
       } else {
@@ -726,50 +512,19 @@ class ChartImpl implements Chart {
       });
     }
 
-    const m = this.model;
-    const isPie = m.type === 'pie' || m.type === 'donut';
-    const ctx = {
+    const ctx: RenderContext = {
       r,
       theme: t,
-      model: m,
+      model: this.model,
       opts: o,
       layout: L,
-      pos,
-      slices,
+      geom: { ...this.geom, pos, slices },
       hover: this.hover,
     };
 
-    if (!isPie) {
-      drawGrid(r, L, t, o);
-      // Crosshair for shared tooltips (under the marks).
-      if (this.hover && o.tooltip.shared && (m.type === 'line' || m.type === 'area')) {
-        const hp = pos[this.hover.si]?.[this.hover.pi];
-        if (hp) {
-          r.line(hp.x, L.plot.y, hp.x, L.plot.y + L.plot.h, { color: t.axisLine, width: 1, dash: [4, 4] });
-        }
-      }
-    }
-
-    switch (m.type) {
-      case 'line':
-        renderLine(ctx);
-        break;
-      case 'area':
-        renderArea(ctx);
-        break;
-      case 'bar':
-        renderBar(ctx);
-        break;
-      case 'scatter':
-        renderScatter(ctx);
-        break;
-      case 'pie':
-      case 'donut':
-        renderPie(ctx);
-        break;
-    }
-
-    if (!isPie) drawAxes(r, L, t, o);
+    if (this.axisChrome) drawGrid(r, L, t, o);
+    this.def.render(ctx);
+    if (this.axisChrome) drawAxes(r, L, t, o);
   }
 
   private scheduleHoverDraw(): void {
@@ -777,7 +532,7 @@ class ChartImpl implements Chart {
     this.hoverRaf = raf(() => {
       this.hoverRaf = null;
       if (this.destroyed || this.animator.running) return;
-      this.drawFrame(this.pos, this.slices);
+      this.drawFrame(this.geom.pos, this.geom.slices);
     });
   }
 
@@ -798,55 +553,7 @@ class ChartImpl implements Chart {
   }
 
   private hitTest(px: number, py: number): HoverState | null {
-    const m = this.model;
-    const L = this.layoutState;
-
-    if (m.type === 'pie' || m.type === 'donut') {
-      if (!this.slices) return null;
-      const slice = sliceAt(this.slices, px, py);
-      if (!slice) return null;
-      const si = m.series.findIndex((s) => s.visible);
-      return si < 0 ? null : { si, pi: slice.pi };
-    }
-
-    if (m.type === 'bar' && L.band) {
-      // Full column band hit target.
-      const along = m.horizontal ? py : px;
-      const cross = m.horizontal ? px : py;
-      const inPlot = m.horizontal
-        ? px >= L.plot.x - HIT_RADIUS && px <= L.plot.x + L.plot.w + HIT_RADIUS
-        : py >= L.plot.y - HIT_RADIUS && py <= L.plot.y + L.plot.h + HIT_RADIUS;
-      if (!inPlot) return null;
-      const bandIdx = L.band.scale.invertIndex(along);
-      if (bandIdx < 0) return null;
-      // Choose the series whose bar (at this band index) is nearest the pointer.
-      let best: HoverState | null = null;
-      let bestD = Infinity;
-      this.pos.forEach((pts, si) => {
-        for (let pi = 0; pi < pts.length; pi++) {
-          const p = pts[pi];
-          if (!p) continue;
-          if (this.bandIndexFor(m.series[si]?.points[pi]?.xv ?? null, pi) !== bandIdx) continue;
-          const center = m.horizontal ? p.y : p.x;
-          const valueLo = Math.min(m.horizontal ? p.x : p.y, m.horizontal ? p.y0 : p.y0);
-          const valueHi = Math.max(m.horizontal ? p.x : p.y, p.y0);
-          const dAlong = Math.abs(center - along);
-          // Prefer bars whose value-extent contains the pointer's cross coord.
-          const inside = cross >= valueLo - 2 && cross <= valueHi + 2;
-          const d = dAlong + (inside ? 0 : 10000);
-          if (d < bestD) {
-            bestD = d;
-            best = { si, pi };
-          }
-        }
-      });
-      return best;
-    }
-
-    if (this.opts.tooltip.shared && (m.type === 'line' || m.type === 'area')) {
-      return nearestByX(this.pos, px);
-    }
-    return nearestPoint(this.pos, px, py);
+    return this.def.hitTest(this.geomContext(), px, py);
   }
 
   private pointEventFor(si: number, pi: number, clientX: number, clientY: number, native: Event | null): PointEvent | null {
@@ -915,13 +622,7 @@ class ChartImpl implements Chart {
 
   private handleKeyDown(e: KeyboardEvent): void {
     if (this.destroyed || !this.opts.a11y.keyboard) return;
-    const m = this.model;
-    const isPie = m.type === 'pie' || m.type === 'donut';
-    const action = navigate(e.key, this.focus, {
-      seriesCount: m.series.length,
-      isVisible: (si) => (isPie ? (m.series[si]?.visible ?? false) : (m.series[si]?.visible ?? false)),
-      pointCount: (si) => m.series[si]?.points.length ?? 0,
-    });
+    const action = navigate(e.key, this.focus, this.def.keyboardNav(this.model));
     if (action.kind === 'none') return;
     e.preventDefault();
 
@@ -956,8 +657,8 @@ class ChartImpl implements Chart {
     this.announceFocus(action.pos);
     if (this.opts.tooltip.show) {
       const rect = this.canvas.getBoundingClientRect();
-      const p = this.pos[action.pos.si]?.[action.pos.pi];
-      const slice = this.slices?.find((s) => s.pi === action.pos.pi);
+      const p = this.geom.pos[action.pos.si]?.[action.pos.pi];
+      const slice = this.geom.slices?.find((s) => s.pi === action.pos.pi);
       const cx = p ? rect.left + p.x : slice ? rect.left + slice.cx : rect.left;
       const cy = p ? rect.top + p.y : slice ? rect.top + slice.cy : rect.top;
       this.showTooltipFor(action.pos, cx, cy);
@@ -966,6 +667,11 @@ class ChartImpl implements Chart {
   }
 
   private announceFocus(pos: NavPosition): void {
+    const custom = this.def.announce?.(this.geomContext(), pos);
+    if (custom !== undefined && custom !== null) {
+      this.announcer.announce(custom);
+      return;
+    }
     const s = this.model.series[pos.si];
     const p = s?.points[pos.pi];
     if (!s || !p) return;
@@ -991,23 +697,21 @@ class ChartImpl implements Chart {
     return fmt ? fmt(y) : formatValue(y);
   }
 
+  /**
+   * Pipeline-built tooltip point for a datum: series identity, palette
+   * color, category-aware x formatting. Type definitions post-process
+   * (slice labels, OHLC blocks, ...) in their tooltipPoints stage.
+   */
   private tooltipPointFor(si: number, pi: number): TooltipPoint | null {
     const m = this.model;
     const s = m.series[si];
     const p = s?.points[pi];
     if (!s || !p) return null;
-    const isPie = m.type === 'pie' || m.type === 'donut';
     let color = seriesColor(s, this.theme);
     let formattedX = this.formatXValue(p.x);
-    if (isPie) {
-      const slice = this.slices?.find((sl) => sl.pi === pi);
-      if (slice) {
-        color = slice.color;
-        formattedX = slice.label;
-      }
-    } else if (m.xType === 'category') {
-      const cat = m.categories?.[this.bandIndexFor(p.xv, pi)];
-      if (cat !== undefined) formattedX = this.formatCategory(cat, m.horizontal ? this.opts.yAxis : this.opts.xAxis);
+    if (m.xType === 'category') {
+      const cat = m.categories?.[bandIndexFor(m, p.xv, pi)];
+      if (cat !== undefined) formattedX = formatCategory(cat, m.horizontal ? this.opts.yAxis : this.opts.xAxis);
     }
     if (p.color) color = p.color;
     return {
@@ -1022,25 +726,13 @@ class ChartImpl implements Chart {
   }
 
   private showTooltipFor(hit: HoverState, clientX: number, clientY: number): void {
-    const m = this.model;
-    const points: TooltipPoint[] = [];
-
-    if (this.opts.tooltip.shared && (m.type === 'line' || m.type === 'area')) {
-      const anchor = this.pos[hit.si]?.[hit.pi];
-      if (anchor) {
-        const idxs = indicesAtX(this.pos, anchor.x);
-        m.series.forEach((s, si) => {
-          if (!s.visible) return;
-          const pi = idxs[si];
-          if (pi === null || pi === undefined) return;
-          const tp = this.tooltipPointFor(si, pi);
-          if (tp) points.push(tp);
-        });
-      }
-    } else {
-      const tp = this.tooltipPointFor(hit.si, hit.pi);
-      if (tp) points.push(tp);
-    }
+    const points = this.def.tooltipPoints(
+      {
+        ...this.geomContext(),
+        pointFor: (si, pi) => this.tooltipPointFor(si, pi),
+      },
+      hit,
+    );
     if (points.length === 0) {
       this.tooltip.hide();
       return;
@@ -1065,7 +757,7 @@ class ChartImpl implements Chart {
     this.tooltip.hide();
     this.computeLayout();
     this.syncDom();
-    this.drawFrame(this.pos, this.slices);
+    this.drawFrame(this.geom.pos, this.geom.slices);
     this.emitter.emit('legendtoggle', { seriesId, visible: nowVisible });
     this.emitter.emit('render', { reason: 'toggle' });
   }

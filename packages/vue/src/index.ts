@@ -14,6 +14,20 @@ export {
   ScatterChart,
   PieChart,
   DonutChart,
+  // v0.2 chart types
+  BubbleChart,
+  SparklineChart,
+  HistogramChart,
+  BoxplotChart,
+  CandlestickChart,
+  OhlcChart,
+  WaterfallChart,
+  HeatmapChart,
+  TreemapChart,
+  SunburstChart,
+  FunnelChart,
+  RadarChart,
+  GaugeChart,
 } from './Chart';
 
 export type { ChartInstance, ChartExposed, TypedChartOptions } from './Chart';
@@ -25,6 +39,8 @@ export type {
   ChartData,
   SeriesOptions,
   DataValue,
+  DataPoint,
+  TreeNode,
   AxisOptions,
   LegendOptions,
   TooltipOptions,

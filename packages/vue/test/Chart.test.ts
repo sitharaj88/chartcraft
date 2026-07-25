@@ -4,7 +4,15 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, reactive, shallowRef, type App, type Component } from 'vue';
-import { Chart, BarChart, LineChart, type ChartExposed, type ChartOptions } from '../src/index';
+import {
+  Chart,
+  BarChart,
+  GaugeChart,
+  HeatmapChart,
+  LineChart,
+  type ChartExposed,
+  type ChartOptions,
+} from '../src/index';
 import { resizeObservers } from './setup';
 
 function makeOptions(): ChartOptions {
@@ -111,5 +119,38 @@ describe('per-type aliases (Vue)', () => {
     expect(exposed.value!.chart!.getOptions().type).toBe('bar');
     (host.querySelector('.chartcraft-legend-item') as HTMLElement).click();
     expect(onLegendToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('v0.2 aliases mount with the correct type (HeatmapChart, GaugeChart)', () => {
+    const heatmap = mountChart(HeatmapChart, {
+      options: {
+        data: {
+          categories: ['Mon', 'Tue', 'Wed'],
+          series: [
+            { name: 'Morning', data: [4, 8, 6] },
+            { name: 'Afternoon', data: [9, 12, 7] },
+          ],
+        },
+        theme: 'light',
+        animation: false,
+        width: 600,
+        height: 400,
+      },
+    });
+    expect(heatmap.exposed.value!.chart!.getOptions().type).toBe('heatmap');
+    expect(heatmap.host.querySelector('.chartcraft')).not.toBeNull();
+
+    const gauge = mountChart(GaugeChart, {
+      options: {
+        data: { series: [{ name: 'CPU', data: [63] }] },
+        gauge: { min: 0, max: 100 },
+        theme: 'light',
+        animation: false,
+        width: 400,
+        height: 300,
+      },
+    });
+    expect(gauge.exposed.value!.chart!.getOptions().type).toBe('gauge');
+    expect(gauge.exposed.value!.chart!.getOptions().gauge).toMatchObject({ min: 0, max: 100 });
   });
 });

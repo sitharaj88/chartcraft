@@ -60,9 +60,9 @@ API (more on the [examples pages](examples/index.md)):
 ## Your first chart (React)
 
 The React wrapper spreads `ChartOptions` as props and adds `className`,
-`style`, and event props. Per-type components (`LineChart`, `AreaChart`,
-`BarChart`, `ScatterChart`, `PieChart`, `DonutChart`) take the same props
-minus `type`.
+`style`, and event props. Per-type components (`LineChart`, `BarChart`,
+`PieChart`, … one for each of the 19 chart types, e.g. `HeatmapChart`,
+`GaugeChart`) take the same props minus `type`.
 
 ```tsx
 import { BarChart } from '@chartcraft/react';

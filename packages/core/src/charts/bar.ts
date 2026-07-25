@@ -2,6 +2,9 @@
  * Bar marks (grouped / stacked / horizontal).
  * Visual spec: 4px rounded corners on the data end only (baseline corners
  * square); 2px surface-colored gap between adjacent and stacked bars.
+ *
+ * Whether a series stacks is carried by its stack bounds (s.y0/s.y1) so
+ * combo charts stack bar-kind series independently of other kinds.
  */
 import type { RenderContext } from '../layout';
 import { seriesColor } from '../model';
@@ -9,42 +12,43 @@ import { seriesColor } from '../model';
 export const BAR_RADIUS = 4;
 export const BAR_GAP = 2;
 
-export function renderBar(ctx: RenderContext): void {
-  const { r, theme, model, layout, pos, hover } = ctx;
-  const band = layout.band;
-  if (!band) return;
-  const barW = band.barW;
+export function renderBarKind(ctx: RenderContext, indices: readonly number[]): void {
+  const { r, theme, model, geom, hover } = ctx;
+  const pos = geom.pos;
+  const barW = geom.bars?.barW ?? 0;
+  if (barW <= 0) return;
   const horizontal = model.horizontal;
 
   // For stacked bars, find the outermost visible segment per (index, sign) —
   // only that segment gets the rounded data-end corners.
   const outerPos = new Map<number, number>();
   const outerNeg = new Map<number, number>();
-  if (model.stacked) {
-    model.series.forEach((s, si) => {
-      if (!s.visible) return;
-      s.points.forEach((p, pi) => {
-        if (p.y === null) return;
-        if (p.y >= 0) outerPos.set(pi, si);
-        else outerNeg.set(pi, si);
-      });
+  for (const si of indices) {
+    const s = model.series[si];
+    if (!s || !s.visible || !s.y1) continue;
+    s.points.forEach((p, pi) => {
+      if (p.y === null) return;
+      if (p.y >= 0) outerPos.set(pi, si);
+      else outerNeg.set(pi, si);
     });
   }
 
-  model.series.forEach((s, si) => {
-    if (!s.visible) return;
+  for (const si of indices) {
+    const s = model.series[si];
+    if (!s || !s.visible) continue;
     const pts = pos[si];
-    if (!pts) return;
+    if (!pts) continue;
+    const stacked = s.y1 !== undefined;
     const color = seriesColor(s, theme);
     pts.forEach((p, pi) => {
       if (!p) return;
       const point = s.points[pi];
-      const value = model.stacked ? (s.y1?.[pi] ?? null) : (point?.y ?? null);
+      const value = stacked ? (s.y1?.[pi] ?? null) : (point?.y ?? null);
       if (value === null) return;
-      const positive = model.stacked ? ((point?.y ?? 0) >= 0) : value >= 0;
+      const positive = stacked ? ((point?.y ?? 0) >= 0) : value >= 0;
       // Stacked segments not touching the baseline leave a 2px gap toward it.
-      const attached = !model.stacked || (s.y0?.[pi] ?? 0) === 0;
-      const isOuter = !model.stacked || (positive ? outerPos.get(pi) : outerNeg.get(pi)) === si;
+      const attached = !stacked || (s.y0?.[pi] ?? 0) === 0;
+      const isOuter = !stacked || (positive ? outerPos.get(pi) : outerNeg.get(pi)) === si;
       const radius = isOuter ? BAR_RADIUS : 0;
       const alpha = hover ? (hover.si === si && hover.pi === pi ? 1 : 0.45) : 1;
       const fillColor = point?.color ?? color;
@@ -77,5 +81,5 @@ export function renderBar(ctx: RenderContext): void {
         r.rect(left, p.y - barW / 2, w, barW, { fill: fillColor, radii, alpha });
       }
     });
-  });
+  }
 }

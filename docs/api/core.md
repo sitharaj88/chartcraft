@@ -1,6 +1,6 @@
 # `@chartcraft/core` API reference
 
-Complete reference for the public surface of `@chartcraft/core` v0.1, as
+Complete reference for the public surface of `@chartcraft/core` v0.2, as
 defined by the [API contract](../api-contract.md). Every type below is
 exported from the package root.
 
@@ -9,7 +9,8 @@ Sections:
 - [Entry points](#entry-points)
 - [The `Chart` instance](#the-chart-instance)
 - [`ChartOptions`](#chartoptions)
-- [Data types](#data-types) — `ChartData`, `SeriesOptions`, `DataValue`
+- [Data types](#data-types) — `ChartData`, `SeriesOptions`, `DataValue`, `DataPoint`, `TreeNode`
+- [Per-type options](#per-type-options) — `histogram`, `heatmap`, `gauge`, `waterfall`
 - [Component options](#component-options) — axes, legend, tooltip, animation, a11y
 - [Events](#events) — `ChartEventMap`, `PointEvent`
 - [Theming](#theming) — `Theme`, palettes
@@ -42,7 +43,7 @@ never mutates the object you pass, and later changes go through
 ### Other exports
 
 ```ts
-export const version: string;                     // package version, e.g. '0.1.0'
+export const version: string;                     // package version, e.g. '0.2.0'
 
 export const lightTheme: Theme;                   // built-in light theme
 export const darkTheme: Theme;                    // built-in dark theme
@@ -144,12 +145,23 @@ The container element you passed to `createChart` (readonly).
 ## `ChartOptions`
 
 ```ts
-type ChartType = 'line' | 'area' | 'bar' | 'scatter' | 'pie' | 'donut';
+type ChartType =
+  // v0.1
+  | 'line' | 'area' | 'bar' | 'scatter' | 'pie' | 'donut'
+  // v0.2
+  | 'bubble' | 'sparkline' | 'histogram' | 'boxplot' | 'candlestick' | 'ohlc'
+  | 'waterfall' | 'heatmap' | 'treemap' | 'sunburst' | 'funnel' | 'radar' | 'gauge';
 ```
+
+All 19 types plug into the same pipeline and deliver the full shared feature
+set — tooltip, legend policy, keyboard navigation + aria table, theming,
+animation, reduced-motion, resize. Per-type data shapes and rules are
+summarized under [`DataValue`](#datavalue) and shown live in the
+[examples](../examples/index.md).
 
 | Field | Type | Default | Description |
 |---|---|---|---|
-| `type` | `ChartType` | — (required) | Chart type. `area` and `bar` support `stacked`; `bar` supports `horizontal`; `pie`/`donut` ignore all cartesian options. |
+| `type` | `ChartType` | — (required) | Chart type. `area` and `bar` support `stacked`; `bar` supports `horizontal`; `pie`/`donut` ignore all cartesian options. On roots `line`/`area`/`bar`/`scatter`, individual series may override their mark via [`SeriesOptions.type`](#seriesoptions) (combo). |
 | `data` | `ChartData` | — (required) | The data. See [Data types](#data-types). |
 | `theme` | `'light' \| 'dark' \| 'auto' \| Theme` | `'auto'` | Built-in theme, live `prefers-color-scheme` tracking (`'auto'`), or a custom [`Theme`](#theme) object. |
 | `title` | `string` | `undefined` | Rendered above the plot in primary ink. Also the default accessible name — [always set one](../accessibility.md#guidance-for-chart-authors). |
@@ -166,6 +178,10 @@ type ChartType = 'line' | 'area' | 'bar' | 'scatter' | 'pie' | 'donut';
 | `animation` | `AnimationOptions \| boolean` | `true` | Entry/update/toggle animation. Auto-disabled when the user has `prefers-reduced-motion: reduce`. See [`AnimationOptions`](#animationoptions). |
 | `downsample` | `{ enabled?: boolean; threshold?: number }` | `{ enabled: true, threshold: 5000 }` | Automatic LTTB downsampling for `line`/`area`/`scatter` series beyond `threshold` points. Render-side only — tooltips, events, and the data table use full data. See [Performance](../performance.md#lttb-downsampling). |
 | `a11y` | `A11yOptions` | see [`A11yOptions`](#a11yoptions) | Accessibility configuration. |
+| `histogram` | `{ bins?: number \| 'auto' }` | `{ bins: 'auto' }` | Histogram only. See [Per-type options](#histogram). |
+| `heatmap` | `{ ramp?: string[]; min?: number; max?: number }` | ramp `sequentialPalette`, min/max data extent | Heatmap only. See [Per-type options](#heatmap). |
+| `gauge` | `{ min?: number; max?: number; bands?: { to: number; color: string }[] }` | `{ min: 0, max: 100 }` | Gauge only. See [Per-type options](#gauge). |
+| `waterfall` | `{ connectors?: boolean }` | `{ connectors: true }` | Waterfall only. See [Per-type options](#waterfall). |
 
 ---
 
@@ -190,6 +206,8 @@ type ChartType = 'line' | 'area' | 'bar' | 'scatter' | 'pie' | 'donut';
 | `curve` | `'linear' \| 'monotone' \| 'step'` | `'linear'` | Interpolation between points. `line`/`area` only. `monotone` never overshoots data; `step` holds each value until the next. |
 | `lineWidth` | `number` | `2` | Stroke width in px. `line`/`area` only. |
 | `showMarkers` | `boolean \| 'auto'` | `'auto'` | Point markers on the line. `'auto'` shows markers when the series has ≤ 60 points. `line`/`area` only. |
+| `type` | `'line' \| 'bar' \| 'area' \| 'scatter'` | root `type` | **Combo:** per-series mark override on charts whose root type is `line`/`area`/`bar`/`scatter`. All series share **one** y-axis — no dual axes, ever. Vertical orientation only: with `horizontal: true` overrides are ignored and every series renders as the root kind. See the [combo example](../examples/combo.md). |
+| `sizeRange` | `[number, number]` | `[8, 40]` | `bubble` only: min/max marker **diameter** in px. The point's `r` value maps to marker **area**, never radius. |
 
 ### `DataValue`
 
@@ -197,21 +215,126 @@ type ChartType = 'line' | 'area' | 'bar' | 'scatter' | 'pie' | 'donut';
 type DataValue =
   | number | null                                  // y against categories/index (null = gap)
   | [number | Date, number | null]                 // [x, y] pair
-  | { x?: number | Date | string; y: number | null; label?: string; color?: string };
+  | [number | Date, number, number]                // [x, y, r] bubble triple
+  | [number | Date, number, number, number, number] // [x, o, h, l, c] candlestick/ohlc
+  | DataPoint;                                     // rich object form
 ```
 
-Three interchangeable shapes (a series may use any one of them):
+The interchangeable shapes (a series may use any one of them):
 
 | Shape | x comes from | Use for |
 |---|---|---|
-| `number \| null` | `categories[index]`, or the index itself | bars, category lines |
+| `number \| null` | `categories[index]`, or the index itself | bars, category lines, heatmap rows, histogram raw samples |
 | `[x, y]` | the tuple's first element (`number` or `Date`) | time series, scatter |
-| `{ x?, y, label?, color? }` | `x` if present (also accepts `string`), else category/index | pie/donut slices, per-point labels or color overrides |
+| `[x, y, r]` | first element | bubble triples |
+| `[x, o, h, l, c]` | first element | candlestick/OHLC |
+| `DataPoint` object | `x` if present (also accepts `string`), else category/index | pie/donut slices, per-point labels or color overrides, and every v0.2 object shape below |
 
 `y: null` is an explicit **gap**: lines break (no interpolation), no bar is
 drawn, the value is excluded from auto min/max, and the data table shows an
 empty cell. Object-shape extras: `label` overrides the point's tooltip/table
 label; `color` overrides that single mark's color.
+
+### `DataPoint`
+
+The rich object form of a datum — a superset; all fields optional, with
+per-type semantics:
+
+| Field | Type | Used by | Description |
+|---|---|---|---|
+| `x` | `number \| Date \| string` | all cartesian, pie/donut, funnel, waterfall | Position / category / stage label. |
+| `y` | `number \| null` | all | Value (`null` = gap). |
+| `label` | `string` | all | Tooltip/table label override. |
+| `color` | `string` | all | Single-mark color override. |
+| `r` | `number` | `bubble` | Size value — maps to marker **area** via `sizeRange`. |
+| `o`, `h`, `l`, `c` | `number` | `candlestick`, `ohlc` | Open / high / low / close. `y` is not required — when omitted it defaults to the close, so events and generic fallbacks carry a sensible value; an explicit `y` wins. |
+| `min`, `q1`, `median`, `q3`, `max` | `number` | `boxplot` | Precomputed 5-number summary. Alternative: a raw `number[]` per category — **any** numeric-array entry (any length) is treated as raw samples and summarized (R-7 quartiles, whiskers to the most extreme samples within 1.5×IQR, dots beyond). TypeScript note: raw arrays need a cast to `DataValue[]`. |
+| `outliers` | `number[]` | `boxplot` | Outlier dots accompanying a 5-number summary. |
+| `isTotal` | `boolean` | `waterfall` | The value is an **absolute total**, not a delta: the bar rises from the baseline and resets the running total. |
+| `children` | `TreeNode[]` | `treemap`, `sunburst` | Hierarchy nesting. |
+
+### `TreeNode`
+
+```ts
+interface TreeNode { label: string; value?: number; color?: string; children?: TreeNode[] }
+```
+
+Treemap/sunburst data is one series of `TreeNode[]`. `value` is optional when
+`children` are present (the parent's value is the sum of its children).
+
+::: warning TypeScript note
+The `DataValue` union does not name `TreeNode`, so genuine `TreeNode[]` data
+needs a cast — `data: nodes as unknown as DataValue[]` — or pass the value as
+`y` (`{ label, y: 10 }`), which is honored as a fallback for `value`. The
+runtime accepts real `TreeNode[]` input (with `value`, `color`, nested
+`children`) as-is.
+
+For nested trees, point events (`pointenter`/`leave`/`click`) fire with the
+type's depth-first `dataIndex` while it addresses an existing top-level
+datum; `x`/`y` then reflect that top-level datum, not the nested node.
+Tooltips, hit-testing, focus announcements, and the a11y table always use the
+hierarchy node's path/value/share.
+:::
+
+---
+
+## Per-type options
+
+### `histogram`
+
+Data is **raw samples** (`number[]` per series); the chart bins them.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `bins` | `number \| 'auto'` | `'auto'` | `'auto'` = Freedman–Diaconis, clamped 5..60, with the width snapped **up** to a nice 1/2/5 step and the first edge aligned to a multiple of it — for ≤ 12 bins, axis ticks land exactly on every bin edge. An explicit `number` splits the raw data extent equally; those edges are generally not nice values, so ticks stay at the axis's own nice positions. |
+
+Bars render full-width (1px hairline between bins); multiple series overlay
+translucently (alpha 0.7). Bins are the interaction unit: `dataIndex` in
+point events is the **bin index** (the event's `x`/`y` carry the backing raw
+sample), while tooltip, announcements, and the a11y table carry the bin
+range + count.
+
+### `heatmap`
+
+Each series is one **row**; its `data: number[]` aligns to `categories`
+(the columns).
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `ramp` | `string[]` | `sequentialPalette` | Sequential color ramp for cell values. |
+| `min` | `number` | data extent | Value mapped to the ramp start. Pin it to share one scale across charts. |
+| `max` | `number` | data extent | Value mapped to the ramp end. |
+
+The legend is a horizontal gradient color-scale bar with min/max labels
+(non-toggleable) — and it shows **even for a single row**, since it is the
+only key to the cell colors (explicit `legend: false` is honored). Cell
+values are always visible in the tooltip and a11y table.
+
+### `gauge`
+
+Single series, single value, 270° arc; the subtitle carries the units.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `min` | `number` | `0` | Range start. |
+| `max` | `number` | `100` | Range end. |
+| `bands` | `{ to: number; color: string }[]` | none | Optional colored ranges (each band runs from the previous `to` up to its own). With bands, the track shows the band colors at 0.35 alpha and the value arc overlays them at full alpha in the color of the band the value falls in (values beyond the last band use the last band's color; track range beyond the last band falls back to the gridline color). Without bands, the value arc is `theme.series[0]` over a gridline-colored track. |
+
+No legend. Band colors are status colors — never series-palette slots.
+
+### `waterfall`
+
+Single series of **deltas**; `isTotal: true` points are absolute totals.
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `connectors` | `boolean` | `true` | Hairline connectors between consecutive bars. |
+
+Increases render in `theme.up`, decreases in `theme.down`, totals in
+`theme.neutral`; a total bar rises from the zero baseline and **resets** the
+running total to its absolute value; zero deltas render as neutral
+hairline-height bars. If multiple series are supplied anyway, only the first
+visible series renders.
 
 ---
 
@@ -343,6 +466,9 @@ interface ChartEventMap {
 | `series` | `string[]` | **8 categorical slots in validated order — never re-sort.** See [Theming](../concepts/theming.md#why-the-order-must-not-change). |
 | `fontFamily` | `string` | Default: `system-ui, -apple-system, "Segoe UI", sans-serif`. |
 | `fontSize` | `number` | Base size in px. Default `12`. |
+| `up` | `string` | **v0.2.** Financial rise / waterfall increase. Light `#0ca30c`, dark `#0ca30c`. Status color — never impersonates a series slot. A doji candle (`close === open`) also renders in `up`. |
+| `down` | `string` | **v0.2.** Financial fall / waterfall decrease. Light `#d03b3b`, dark `#d03b3b`. |
+| `neutral` | `string` | **v0.2.** Waterfall totals & neutral marks. Light `#52514e`, dark `#c3c2b7`. |
 
 ### Built-in values
 
@@ -392,7 +518,7 @@ chart, or writing formatters that need domain knowledge:
 
 Which axis `type` maps to which scale is contract-fixed (see
 [`AxisOptions`](#axisoptions)); the classes' constructor and method details
-are part of the shipped `.d.ts` declarations rather than this v0.1 contract
+are part of the shipped `.d.ts` declarations rather than this contract
 page, and are stable within a minor version.
 
 ### `downsampleLTTB`
@@ -412,7 +538,7 @@ package's `.d.ts`.
 ### `version`
 
 ```ts
-import { version } from '@chartcraft/core';   // e.g. '0.1.0'
+import { version } from '@chartcraft/core';   // e.g. '0.2.0'
 ```
 
 The package version string — useful in bug reports and runtime feature

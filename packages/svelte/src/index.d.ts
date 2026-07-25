@@ -20,6 +20,8 @@ export type {
   ChartData,
   SeriesOptions,
   DataValue,
+  DataPoint,
+  TreeNode,
   AxisOptions,
   LegendOptions,
   TooltipOptions,
@@ -66,6 +68,20 @@ export class BarChart extends TypedChart {}
 export class ScatterChart extends TypedChart {}
 export class PieChart extends TypedChart {}
 export class DonutChart extends TypedChart {}
+// v0.2 chart types
+export class BubbleChart extends TypedChart {}
+export class SparklineChart extends TypedChart {}
+export class HistogramChart extends TypedChart {}
+export class BoxplotChart extends TypedChart {}
+export class CandlestickChart extends TypedChart {}
+export class OhlcChart extends TypedChart {}
+export class WaterfallChart extends TypedChart {}
+export class HeatmapChart extends TypedChart {}
+export class TreemapChart extends TypedChart {}
+export class SunburstChart extends TypedChart {}
+export class FunnelChart extends TypedChart {}
+export class RadarChart extends TypedChart {}
+export class GaugeChart extends TypedChart {}
 
 /** Core event names bridged by every component. */
 export const EVENTS: readonly ['pointclick', 'pointenter', 'pointleave', 'legendtoggle'];

@@ -78,8 +78,19 @@ examples/    — runnable vanilla HTML demos against the built core
   call-log assertions against the stub.
 - Wrapper tests mount/update/destroy against the real core.
 
-## Roadmap (post-v0.1)
+## Chart-type registry (v0.2)
+
+Every chart type is a `ChartTypeDefinition` module registered in
+`packages/core/src/charts/registry.ts` — it owns layout, render, hit-test,
+legend items, a11y table rows, and keyboard geometry for its type.
+`chart.ts` dispatches through the registry and contains no per-type
+branching. Adding a chart type = adding one module + registering it; the
+pipeline, wrappers, and a11y layer pick it up automatically. Combo charts
+(per-series `type` on cartesian roots) mix line/bar/area/scatter series on
+one shared y-axis — the one-axis rule is non-negotiable.
+
+## Roadmap (post-v0.2)
 
 - SVG + WebGL renderers, Angular & Solid wrappers, SSR snapshot rendering,
-  image/PDF export, financial & statistical chart types, streaming data API,
-  plugin system, visual regression harness.
+  image/PDF export, streaming data API, plugin system, visual regression
+  harness.

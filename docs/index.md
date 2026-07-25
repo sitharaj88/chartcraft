@@ -4,7 +4,7 @@ layout: home
 hero:
   name: ChartCraft
   text: World-class charts for the modern web
-  tagline: A zero-dependency, framework-agnostic charting core with thin React, Vue, and Svelte wrappers — accessible, colorblind-safe, and fast by default.
+  tagline: A zero-dependency, framework-agnostic charting core with 19 chart types and thin React, Vue, and Svelte wrappers — accessible, colorblind-safe, and fast by default.
   actions:
     - theme: brand
       text: Get Started
@@ -17,6 +17,8 @@ hero:
       link: https://github.com/OWNER/charts
 
 features:
+  - title: 19 chart types
+    details: From line, bar, and pie to histogram, boxplot, candlestick, waterfall, heatmap, treemap, sunburst, funnel, radar, gauge, sparkline — plus combo mixing. Every type ships with tooltips, keyboard navigation, and a data table.
   - title: Framework-agnostic core
     details: One canvas-rendered engine with zero runtime dependencies. Every feature lives in @chartcraft/core, so every framework gets exact parity.
   - title: React, Vue & Svelte wrappers

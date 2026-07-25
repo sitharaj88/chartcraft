@@ -98,6 +98,32 @@ The three shapes may not be what you already have — but they map directly:
 rows of `{date, value}` become pairs; a keyed object becomes point objects;
 parallel arrays become plain numbers plus `categories`.
 
+## v0.2 data shapes
+
+The 13 chart types added in v0.2 extend the same model rather than replacing
+it — richer tuples, a superset of point-object fields, and two "raw input"
+conventions:
+
+- **`[x, y, r]` triples** (bubble): the third element is the size value,
+  mapped to marker **area** via the series' `sizeRange`. Object form:
+  `{ x, y, r }`.
+- **`[x, o, h, l, c]` tuples** (candlestick/OHLC): open/high/low/close per
+  x. Object form: `{ x, o, h, l, c }` — no `y` needed (it defaults to the
+  close).
+- **`TreeNode[]`** (treemap/sunburst): `{ label, value?, color?, children? }`,
+  nested; a parent's value defaults to the sum of its children. In
+  TypeScript, cast to `DataValue[]` (the union doesn't name `TreeNode`) or
+  pass the value as `y`.
+- **Raw samples** (histogram/boxplot): a histogram series is just
+  `number[]` — the raw samples, binned by the chart. A boxplot category is
+  either a 5-number object (`{ min, q1, median, q3, max, outliers? }`) or a
+  raw `number[]`, summarized by the chart (raw arrays need a cast in
+  TypeScript).
+
+Waterfall points add `isTotal: true` to mark absolute totals among deltas.
+Full field-by-field semantics: [`DataPoint`](../api/core.md#datapoint) in the
+API reference, and each type's [example page](../examples/index.md).
+
 ## Categories vs `[x, y]` pairs
 
 Choose by what the x-axis *is*:

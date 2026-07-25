@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { createRef } from 'react';
 import { afterEach } from 'vitest';
-import { Chart, BarChart, LineChart, type ChartInstance } from '../src/index';
+import { Chart, BarChart, LineChart, HeatmapChart, GaugeChart, type ChartInstance } from '../src/index';
 import type { ChartData } from '../src/index';
 import { resizeObservers } from './setup';
 
@@ -117,5 +117,42 @@ describe('per-type aliases', () => {
     const ref = createRef<ChartInstance>();
     render(<BarChart ref={ref} {...base} />);
     expect(ref.current!.getOptions().type).toBe('bar');
+  });
+
+  it('v0.2 aliases mount with the correct type (HeatmapChart, GaugeChart)', () => {
+    const heatmapRef = createRef<ChartInstance>();
+    const { container: heatmapHost } = render(
+      <HeatmapChart
+        ref={heatmapRef}
+        data={{
+          categories: ['Mon', 'Tue', 'Wed'],
+          series: [
+            { name: 'Morning', data: [4, 8, 6] },
+            { name: 'Afternoon', data: [9, 12, 7] },
+          ],
+        }}
+        theme="light"
+        animation={false}
+        width={600}
+        height={400}
+      />,
+    );
+    expect(heatmapRef.current!.getOptions().type).toBe('heatmap');
+    expect(heatmapHost.querySelector('.chartcraft')).not.toBeNull();
+
+    const gaugeRef = createRef<ChartInstance>();
+    render(
+      <GaugeChart
+        ref={gaugeRef}
+        data={{ series: [{ name: 'CPU', data: [63] }] }}
+        gauge={{ min: 0, max: 100 }}
+        theme="light"
+        animation={false}
+        width={400}
+        height={300}
+      />,
+    );
+    expect(gaugeRef.current!.getOptions().type).toBe('gauge');
+    expect(gaugeRef.current!.getOptions().gauge).toMatchObject({ min: 0, max: 100 });
   });
 });

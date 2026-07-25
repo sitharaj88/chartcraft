@@ -2,7 +2,7 @@
  * Data normalization: folds the three DataValue shapes into one internal
  * point representation. Pure functions — no DOM.
  */
-import type { DataValue } from '../types';
+import type { DataValue, TreeNode } from '../types';
 import { downsampleLTTB } from './downsample';
 
 export interface NormalizedPoint {
@@ -10,10 +10,25 @@ export interface NormalizedPoint {
   x: number | Date | string | null;
   /** Numeric x for continuous scales (ms for Dates) or band index; null = unknown. */
   xv: number | null;
-  /** y value; null = gap. */
+  /** y value; null = gap. For o/h/l/c data, y defaults to the close. */
   y: number | null;
   label?: string;
   color?: string;
+  // v0.2 rich fields, carried through verbatim (per-type semantics).
+  /** bubble size value (maps to marker area) */
+  r?: number;
+  o?: number;
+  h?: number;
+  l?: number;
+  c?: number;
+  min?: number;
+  q1?: number;
+  median?: number;
+  q3?: number;
+  max?: number;
+  outliers?: number[];
+  isTotal?: boolean;
+  children?: TreeNode[];
 }
 
 export type Category = string | number | Date;
@@ -43,13 +58,37 @@ export function normalizeSeriesData(
         y: v ?? null,
       };
     } else if (Array.isArray(v)) {
-      const [xr, yr] = v;
-      out[i] = { x: xr, xv: toNumericX(xr), y: yr ?? null };
+      const xr = v[0];
+      if (v.length >= 5) {
+        // [x, o, h, l, c] — y defaults to the close for tables/tooltips/domains.
+        const [, o, h, l, c] = v as [number | Date, number, number, number, number];
+        out[i] = { x: xr, xv: toNumericX(xr), y: c ?? null, o, h, l, c };
+      } else if (v.length === 3) {
+        // [x, y, r] bubble triple.
+        const [, yr, rr] = v as [number | Date, number, number];
+        out[i] = { x: xr, xv: toNumericX(xr), y: yr ?? null, r: rr };
+      } else {
+        const yr = (v as [number | Date, number | null])[1];
+        out[i] = { x: xr, xv: toNumericX(xr), y: yr ?? null };
+      }
     } else {
-      // Object shape { x?, y, label?, color? }
-      const p: NormalizedPoint = { x: null, xv: null, y: v.y ?? null };
+      // Object shape (DataPoint): { x?, y?, label?, color?, ...rich fields }
+      const p: NormalizedPoint = { x: null, xv: null, y: v.y ?? v.c ?? null };
       if (v.label !== undefined) p.label = v.label;
       if (v.color !== undefined) p.color = v.color;
+      if (v.r !== undefined) p.r = v.r;
+      if (v.o !== undefined) p.o = v.o;
+      if (v.h !== undefined) p.h = v.h;
+      if (v.l !== undefined) p.l = v.l;
+      if (v.c !== undefined) p.c = v.c;
+      if (v.min !== undefined) p.min = v.min;
+      if (v.q1 !== undefined) p.q1 = v.q1;
+      if (v.median !== undefined) p.median = v.median;
+      if (v.q3 !== undefined) p.q3 = v.q3;
+      if (v.max !== undefined) p.max = v.max;
+      if (v.outliers !== undefined) p.outliers = v.outliers;
+      if (v.isTotal !== undefined) p.isTotal = v.isTotal;
+      if (v.children !== undefined) p.children = v.children;
       const x = v.x;
       if (x === undefined) {
         p.x = categories ? (categories[i] ?? i) : i;
@@ -86,8 +125,11 @@ export function inferXType(args: {
   chartType: string;
   hasCategories: boolean;
   sampleXs: readonly (number | Date | string | null)[];
+  /** Chart types that declare a band x-axis (registry `needs.xScale: 'band'`). */
+  forceCategory?: boolean;
 }): XType {
   if (args.explicit) return args.explicit;
+  if (args.forceCategory) return 'category';
   if (args.chartType === 'bar') return 'category';
   if (args.hasCategories) return 'category';
   for (const x of args.sampleXs) {

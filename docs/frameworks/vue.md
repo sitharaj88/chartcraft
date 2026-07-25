@@ -79,8 +79,12 @@ wholesale, or use the exposed instance (below) and call `setData` directly.
 
 ## Per-type convenience components
 
+One per chart type — same interface, minus `type` inside `options`:
 `LineChart`, `AreaChart`, `BarChart`, `ScatterChart`, `PieChart`,
-`DonutChart` — same interface, minus `type` inside `options`:
+`DonutChart`, and (v0.2) `BubbleChart`, `SparklineChart`, `HistogramChart`,
+`BoxplotChart`, `CandlestickChart`, `OhlcChart`, `WaterfallChart`,
+`HeatmapChart`, `TreemapChart`, `SunburstChart`, `FunnelChart`,
+`RadarChart`, `GaugeChart`:
 
 ```vue
 <template>

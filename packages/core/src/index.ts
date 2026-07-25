@@ -20,6 +20,8 @@ export type {
   ChartData,
   SeriesOptions,
   DataValue,
+  DataPoint,
+  TreeNode,
   AxisOptions,
   LegendOptions,
   TooltipOptions,

@@ -1,10 +1,17 @@
 /**
- * Pie / donut marks. Slices are separated by a 2px surface-colored gap
- * (stroked in surface color). Donut hole = 60% of the outer radius.
+ * Pie / donut chart-type definitions. Slices are separated by a 2px
+ * surface-colored gap (stroked in surface color). Donut hole = 60% of the
+ * outer radius. The legend lists slices (non-toggleable) so slice identity
+ * never rides on color alone; legend "auto" keys off the slice count.
  */
-import type { PieSlice, Rect, RenderContext } from '../layout';
+import type { ChartType, TooltipPoint } from '../types';
+import type { PieSlice, Rect, RenderContext, TypeGeom } from '../layout';
 import { seriesColor, type DataModel } from '../model';
 import type { Theme } from '../types';
+import type { ChartTypeDefinition, TooltipExtractContext } from './registry';
+import type { A11yTableSpec } from '../a11y';
+import { sliceAt } from '../interaction/hittest';
+import { formatValue } from '../util';
 
 export const DONUT_INNER_RATIO = 0.6;
 export const SLICE_GAP = 2;
@@ -76,7 +83,8 @@ export function computeSlices(model: DataModel, plot: Rect, theme: Theme): PieSl
 }
 
 export function renderPie(ctx: RenderContext): void {
-  const { r, theme, slices, hover } = ctx;
+  const { r, theme, geom, hover } = ctx;
+  const slices = geom.slices;
   if (!slices) return;
   for (const s of slices) {
     const hovered = hover !== null && hover.pi === s.pi;
@@ -88,3 +96,93 @@ export function renderPie(ctx: RenderContext): void {
     });
   }
 }
+
+// ---------------------------------------------------------------------------
+// Definition (shared by pie & donut; the hole ratio keys off model.type).
+
+function makePieDefinition(id: ChartType): ChartTypeDefinition {
+  return {
+    id,
+    needs: { cartesianAxes: false },
+
+    resolveOptions(resolved, raw) {
+      // Legend "auto" keys off the slice count (positive slices only).
+      const rawShow = typeof raw.legend === 'boolean' ? raw.legend : raw.legend?.show;
+      if (rawShow === undefined) {
+        const sliceCount = (raw.data?.series?.[0]?.data ?? []).filter((d) => {
+          const y =
+            typeof d === 'number' ? d : Array.isArray(d) ? d[1] : d && typeof d === 'object' ? d.y : null;
+          return typeof y === 'number' && y > 0;
+        }).length;
+        resolved.legend.show = sliceCount >= 2;
+      }
+    },
+
+    layout(ctx): TypeGeom {
+      return {
+        pos: ctx.model.series.map(() => []),
+        slices: computeSlices(ctx.model, ctx.layout.plot, ctx.theme),
+        bars: null,
+      };
+    },
+
+    render(ctx) {
+      renderPie(ctx);
+    },
+
+    hitTest(ctx, px, py) {
+      const slices = ctx.geom.slices;
+      if (!slices) return null;
+      const slice = sliceAt(slices, px, py);
+      if (!slice) return null;
+      const si = ctx.model.series.findIndex((s) => s.visible);
+      return si < 0 ? null : { si, pi: slice.pi };
+    },
+
+    legendItems(ctx) {
+      // Slices, non-toggleable — slice identity never rides on color alone.
+      return computeSliceMeta(ctx.model, ctx.theme).map((sl) => ({
+        id: `slice:${sl.pi}`,
+        name: sl.label,
+        color: sl.color,
+        visible: true,
+        toggleable: false,
+      }));
+    },
+
+    a11yTable(ctx): A11yTableSpec {
+      const m = ctx.model;
+      const series = m.series.find((s) => s.visible) ?? m.series[0];
+      const rows: A11yTableSpec['rows'] = [];
+      series?.points.forEach((p, pi) => {
+        rows.push({
+          header: p.label ?? (typeof p.x === 'string' ? p.x : formatValue(m.categories?.[pi] ?? pi)),
+          cells: [p.y === null ? '—' : formatValue(p.y)],
+        });
+      });
+      return { columns: ['Slice', 'Value'], rows };
+    },
+
+    keyboardNav(model) {
+      return {
+        seriesCount: model.series.length,
+        isVisible: (si) => model.series[si]?.visible ?? false,
+        pointCount: (si) => model.series[si]?.points.length ?? 0,
+      };
+    },
+
+    tooltipPoints(ctx: TooltipExtractContext, hit): TooltipPoint[] {
+      const tp = ctx.pointFor(hit.si, hit.pi);
+      if (!tp) return [];
+      const slice = ctx.geom.slices?.find((sl) => sl.pi === hit.pi);
+      if (slice) {
+        tp.color = slice.color;
+        tp.formattedX = slice.label;
+      }
+      return [tp];
+    },
+  };
+}
+
+export const pieDefinition = makePieDefinition('pie');
+export const donutDefinition = makePieDefinition('donut');

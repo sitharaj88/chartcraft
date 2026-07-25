@@ -50,8 +50,20 @@ interface Theme {
   series: string[];           // 8 categorical slots, validated order — never re-sort
   fontFamily: string;         // default: system-ui, -apple-system, "Segoe UI", sans-serif
   fontSize: number;           // base px, default 12
+  // v0.2 status colors
+  up: string;                 // financial rise / waterfall increase ('#0ca30c' both modes)
+  down: string;               // financial fall / waterfall decrease ('#d03b3b' both modes)
+  neutral: string;            // waterfall totals & neutral marks ('#52514e' light, '#c3c2b7' dark)
 }
 ```
+
+The v0.2 `up` / `down` / `neutral` entries are **status colors**, used by
+candlestick/OHLC bodies and waterfall bars. They are deliberately separate
+from the 8 series slots: status colors carry meaning (rise/fall/total) and
+never impersonate a series identity — and vice versa. If you brand them,
+keep the rise/fall pair distinguishable for colorblind readers (the marks'
+geometry — body direction, tick sides, bar direction — always carries the
+information redundantly).
 
 The built-in themes and palettes are exported:
 

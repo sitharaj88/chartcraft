@@ -1,9 +1,19 @@
 # Roadmap
 
-Where ChartCraft goes after v0.1. Items are grouped by theme, not strictly
+Where ChartCraft goes next. Items are grouped by theme, not strictly
 ordered; the [API contract](api-contract.md) governs every addition — each of
 these lands as a contract change first, then core, then wrappers, then docs
 (see `CONTRIBUTING.md` in the repository root).
+
+## Shipped in 0.2
+
+The chart-type items from the original roadmap landed in v0.2 — thirteen new
+types plus combo (per-series mark mixing), for 19 total: bubble, sparkline,
+histogram, boxplot, candlestick, OHLC, waterfall, heatmap, treemap, sunburst,
+funnel, radar, and gauge. As promised, every one shipped with palette slots
+by identity, a data-table representation, and full keyboard navigation — and
+the financial types got their volume-pane story as a small multiple, not a
+dual axis. See the [examples gallery](examples/index.md).
 
 ## Renderers
 
@@ -35,12 +45,11 @@ chart code:
 
 ## Chart types
 
-- **Financial** — candlestick/OHLC, with the volume pane handled as a small
-  multiple (ChartCraft will not grow a dual axis).
-- **Statistical** — box plot, histogram, error bars.
-- New types follow the existing rules: they get palette slots by identity,
-  a data-table representation, and full keyboard navigation before they
-  ship.
+- The v0.1 chart-type wishlist (financial and statistical types) shipped in
+  v0.2 — see [Shipped in 0.2](#shipped-in-0-2) above.
+- Still open: **error bars** as a series decoration on cartesian types.
+- Any future type follows the same rules: palette slots by identity, a
+  data-table representation, and full keyboard navigation before it ships.
 
 ## Data
 

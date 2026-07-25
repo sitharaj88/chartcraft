@@ -30,6 +30,9 @@ export const lightTheme: Theme = {
   series: [...categoricalPalette.light],
   fontFamily: FONT_FAMILY,
   fontSize: 12,
+  up: '#0ca30c',
+  down: '#d03b3b',
+  neutral: '#52514e',
 };
 
 export const darkTheme: Theme = {
@@ -43,6 +46,9 @@ export const darkTheme: Theme = {
   series: [...categoricalPalette.dark],
   fontFamily: FONT_FAMILY,
   fontSize: 12,
+  up: '#0ca30c',
+  down: '#d03b3b',
+  neutral: '#c3c2b7',
 };
 
 /** SSR-safe: never touches window at module scope. */

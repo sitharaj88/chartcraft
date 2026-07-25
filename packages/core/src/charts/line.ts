@@ -1,6 +1,9 @@
 /**
  * Line marks: 2px lines (per-series lineWidth), markers >= 8px diameter with
  * a 2px surface ring. showMarkers 'auto' shows markers when count <= 60.
+ *
+ * Renders every series whose index is listed in `indices` — the cartesian
+ * definition passes the line-kind series in combo z-order.
  */
 import type { RenderContext } from '../layout';
 import { seriesColor, type NormalizedSeries } from '../model';
@@ -14,13 +17,15 @@ export function markersVisible(s: NormalizedSeries, pointCount: number): boolean
   return s.showMarkers;
 }
 
-export function renderLine(ctx: RenderContext): void {
-  const { r, theme, model, layout, pos, hover } = ctx;
+export function renderLineKind(ctx: RenderContext, indices: readonly number[]): void {
+  const { r, theme, model, layout, geom, hover } = ctx;
+  const pos = geom.pos;
   r.clipRect(layout.plot.x - MARKER_RADIUS - 2, layout.plot.y - MARKER_RADIUS - 2, layout.plot.w + 2 * (MARKER_RADIUS + 2), layout.plot.h + 2 * (MARKER_RADIUS + 2), () => {
-    model.series.forEach((s, si) => {
-      if (!s.visible) return;
+    for (const si of indices) {
+      const s = model.series[si];
+      if (!s || !s.visible) continue;
       const pts = pos[si];
-      if (!pts || pts.length === 0) return;
+      if (!pts || pts.length === 0) continue;
       const color = seriesColor(s, theme);
       const cmds = linePath(pts, s.curve);
       if (cmds.length > 0) {
@@ -47,6 +52,6 @@ export function renderLine(ctx: RenderContext): void {
           });
         }
       }
-    });
+    }
   });
 }

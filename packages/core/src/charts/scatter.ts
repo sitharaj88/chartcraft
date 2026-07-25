@@ -5,14 +5,16 @@ import type { RenderContext } from '../layout';
 import { seriesColor } from '../model';
 import { MARKER_RADIUS, MARKER_RING } from './line';
 
-export function renderScatter(ctx: RenderContext): void {
-  const { r, theme, model, layout, pos, hover } = ctx;
+export function renderScatterKind(ctx: RenderContext, indices: readonly number[]): void {
+  const { r, theme, model, layout, geom, hover } = ctx;
+  const pos = geom.pos;
   const pad = MARKER_RADIUS + 4;
   r.clipRect(layout.plot.x - pad, layout.plot.y - pad, layout.plot.w + 2 * pad, layout.plot.h + 2 * pad, () => {
-    model.series.forEach((s, si) => {
-      if (!s.visible) return;
+    for (const si of indices) {
+      const s = model.series[si];
+      if (!s || !s.visible) continue;
       const pts = pos[si];
-      if (!pts) return;
+      if (!pts) continue;
       const color = seriesColor(s, theme);
       pts.forEach((p, pi) => {
         if (!p) return;
@@ -24,6 +26,6 @@ export function renderScatter(ctx: RenderContext): void {
           alpha,
         });
       });
-    });
+    }
   });
 }

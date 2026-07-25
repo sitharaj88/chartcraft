@@ -50,13 +50,66 @@ export default defineConfig({
         text: 'Examples',
         items: [
           { text: 'Overview', link: '/examples/' },
-          { text: 'Line', link: '/examples/line' },
-          { text: 'Area', link: '/examples/area' },
-          { text: 'Bar', link: '/examples/bar' },
-          { text: 'Scatter', link: '/examples/scatter' },
-          { text: 'Pie & donut', link: '/examples/pie' },
-          { text: 'Large data', link: '/examples/large-data' },
-          { text: 'Events', link: '/examples/events' },
+          {
+            text: 'Trends & comparison',
+            items: [
+              { text: 'Line', link: '/examples/line' },
+              { text: 'Area', link: '/examples/area' },
+              { text: 'Bar', link: '/examples/bar' },
+              { text: 'Scatter', link: '/examples/scatter' },
+              { text: 'Bubble', link: '/examples/bubble' },
+            ],
+          },
+          {
+            text: 'Part-to-whole & stages',
+            items: [
+              { text: 'Pie & donut', link: '/examples/pie' },
+              { text: 'Funnel', link: '/examples/funnel' },
+            ],
+          },
+          {
+            text: 'Statistical',
+            items: [
+              { text: 'Histogram', link: '/examples/histogram' },
+              { text: 'Boxplot', link: '/examples/boxplot' },
+            ],
+          },
+          {
+            text: 'Financial',
+            items: [
+              { text: 'Candlestick & OHLC', link: '/examples/candlestick' },
+              { text: 'Waterfall', link: '/examples/waterfall' },
+            ],
+          },
+          {
+            text: 'Hierarchy & matrix',
+            items: [
+              { text: 'Treemap', link: '/examples/treemap' },
+              { text: 'Sunburst', link: '/examples/sunburst' },
+              { text: 'Heatmap', link: '/examples/heatmap' },
+            ],
+          },
+          {
+            text: 'Radial',
+            items: [
+              { text: 'Radar', link: '/examples/radar' },
+              { text: 'Gauge', link: '/examples/gauge' },
+            ],
+          },
+          {
+            text: 'Micro & combo',
+            items: [
+              { text: 'Sparkline', link: '/examples/sparkline' },
+              { text: 'Combo', link: '/examples/combo' },
+            ],
+          },
+          {
+            text: 'Showcases',
+            items: [
+              { text: 'Large data', link: '/examples/large-data' },
+              { text: 'Events', link: '/examples/events' },
+            ],
+          },
         ],
       },
       {
