@@ -19,7 +19,7 @@ import { bandIndexFor, seriesColor } from '../../model';
 import { BandScale } from '../../scales/band';
 import { LinearScale } from '../../scales/linear';
 import { formatValue } from '../../util';
-import { HIT_RADIUS } from '../../interaction/hittest';
+import { hitRadius } from '../../interaction/hittest';
 
 export type WaterfallKind = 'up' | 'down' | 'neutral' | 'total';
 
@@ -189,8 +189,8 @@ export const waterfallDefinition: ChartTypeDefinition = {
     const L = ctx.layout;
     const band = L.xScale instanceof BandScale ? L.xScale : null;
     if (!extra || !band) return null;
-    if (py < L.plot.y - HIT_RADIUS || py > L.plot.y + L.plot.h + HIT_RADIUS) return null;
-    if (px < L.plot.x - HIT_RADIUS || px > L.plot.x + L.plot.w + HIT_RADIUS) return null;
+    if (py < L.plot.y - hitRadius() || py > L.plot.y + L.plot.h + hitRadius()) return null;
+    if (px < L.plot.x - hitRadius() || px > L.plot.x + L.plot.w + hitRadius()) return null;
     const pi = band.invertIndex(px);
     if (pi < 0) return null;
     const p = ctx.geom.pos[extra.si]?.[pi];

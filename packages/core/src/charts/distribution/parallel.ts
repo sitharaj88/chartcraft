@@ -28,7 +28,7 @@ import type { LegendItem } from '../../components/legend';
 import type { NavContext } from '../../a11y/keyboard';
 import type { PathCmd } from '../../render/renderer';
 import { formatValue } from '../../util';
-import { HIT_RADIUS, nearestPoint } from '../../interaction/hittest';
+import { hitRadius, nearestPoint } from '../../interaction/hittest';
 
 export const PARALLEL_LINE_ALPHA = 0.7;
 export const PARALLEL_LINE_WIDTH = 1;
@@ -239,7 +239,7 @@ export function computeParallelFrame(args: {
  * Dimension index whose axis is within `tolerance` px of `px` (-1 for none).
  * Exposed as the axis-brushing seam for the zoom feature.
  */
-export function parallelAxisAtX(frame: ParallelFrame, px: number, tolerance = HIT_RADIUS / 2): number {
+export function parallelAxisAtX(frame: ParallelFrame, px: number, tolerance = hitRadius() / 2): number {
   let best = -1;
   let bestD = tolerance;
   for (const d of frame.dims) {

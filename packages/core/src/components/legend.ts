@@ -6,6 +6,7 @@
  */
 import type { Theme } from '../types';
 import type { ResolvedLegend } from '../model';
+import { coarsePointerMedia } from '../interaction/hittest';
 
 export interface LegendItem {
   id: string;
@@ -63,6 +64,14 @@ export class Legend {
     this.el.textContent = '';
     if (!legend.show) return;
 
+    // Legend entries are real `<button>`s, so a tap already activates them —
+    // but at the mouse padding a series swatch is a ~16px tall target, half the
+    // 44px minimum a fingertip can reliably hit. Sizing is a property of the
+    // DEVICE (there is no event to ask when the legend is built), so this is
+    // the one decision that legitimately reads the media query rather than a
+    // per-event `pointerType`.
+    const coarse = coarsePointerMedia();
+
     for (const s of items) {
       const toggleable = legend.interactive && s.toggleable;
       const item = doc.createElement('button');
@@ -82,10 +91,14 @@ export class Legend {
       ist.gap = '6px';
       ist.border = 'none';
       ist.background = 'none';
-      ist.padding = '2px 4px';
+      ist.padding = coarse ? '10px 8px' : '2px 4px';
+      if (coarse) ist.minHeight = '44px';
       ist.font = `${theme.fontSize}px ${theme.fontFamily}`;
       ist.cursor = toggleable ? 'pointer' : 'default';
       ist.opacity = s.visible ? '1' : '0.45';
+      // No double-tap-to-zoom delay on the toggle, and no page scroll started
+      // from a button the user meant to press.
+      ist.touchAction = 'manipulation';
 
       const swatch = doc.createElement('span');
       swatch.className = 'chartcraft-legend-swatch';

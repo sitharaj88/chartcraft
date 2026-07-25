@@ -25,7 +25,7 @@ import type { ResolvedOptions } from '../model';
 import { bandIndexFor, seriesColor } from '../model';
 import { BandScale } from '../scales/band';
 import { formatValue } from '../util';
-import { HIT_RADIUS, indicesAtX, nearestByX, nearestPoint } from '../interaction/hittest';
+import { hitRadius, indicesAtX, nearestByX, nearestPoint } from '../interaction/hittest';
 import type { A11yTableSpec } from '../a11y';
 import { a11yRowBudget } from '../a11y';
 import type { LegendItem } from '../components/legend';
@@ -220,7 +220,7 @@ function rangeBandHit(ctx: GeomContext, px: number, py: number): HoverState | nu
     pts.forEach((p, pi) => {
       if (!p) return;
       const dx = Math.abs(p.x - px);
-      if (dx > HIT_RADIUS) return;
+      if (dx > hitRadius()) return;
       const lo = Math.min(p.y, p.y0);
       const hi = Math.max(p.y, p.y0);
       const inside = py >= lo - 2 && py <= hi + 2;
@@ -243,8 +243,8 @@ function barHit(ctx: GeomContext, px: number, py: number): HoverState | null {
     const along = m.horizontal ? py : px;
     const cross = m.horizontal ? px : py;
     const inPlot = m.horizontal
-      ? px >= L.plot.x - HIT_RADIUS && px <= L.plot.x + L.plot.w + HIT_RADIUS
-      : py >= L.plot.y - HIT_RADIUS && py <= L.plot.y + L.plot.h + HIT_RADIUS;
+      ? px >= L.plot.x - hitRadius() && px <= L.plot.x + L.plot.w + hitRadius()
+      : py >= L.plot.y - hitRadius() && py <= L.plot.y + L.plot.h + hitRadius();
     if (!inPlot) return null;
     const bandIdx = alongScale.invertIndex(along);
     if (bandIdx < 0) return null;
@@ -277,7 +277,7 @@ function barHit(ctx: GeomContext, px: number, py: number): HoverState | null {
   // Linear/time x: nearest bar center by x within the bar width.
   const masked = m.series.map((s, si) => (s.visible && s.kind === 'bar' ? (geom.pos[si] ?? []) : []));
   const barW = geom.bars?.barW ?? 0;
-  return nearestByX(masked, px, Math.max(HIT_RADIUS, barW));
+  return nearestByX(masked, px, Math.max(hitRadius(), barW));
 }
 
 export function makeCartesianDefinition(cfg: CartesianConfig): ChartTypeDefinition {

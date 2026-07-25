@@ -133,6 +133,80 @@ Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', {
   writable: true,
 });
 
+// ---- PointerEvent + pointer capture stubs ---------------------------------
+// jsdom implements NEITHER: `window.PointerEvent` is undefined and
+// `Element.prototype.setPointerCapture` does not exist. Without these every
+// touch path would be untestable, so we supply a PointerEvent that is a
+// MouseEvent carrying the three fields the pipeline reads (`pointerId`,
+// `pointerType`, `isPrimary`) and a capture implementation that RECORDS which
+// pointers an element claimed, so a test can assert that a drag took ownership
+// of its gesture.
+
+export interface StubPointerEventInit extends MouseEventInit {
+  pointerId?: number;
+  pointerType?: 'mouse' | 'touch' | 'pen';
+  isPrimary?: boolean;
+}
+
+export class StubPointerEvent extends MouseEvent {
+  readonly pointerId: number;
+  readonly pointerType: string;
+  readonly isPrimary: boolean;
+
+  constructor(type: string, init: StubPointerEventInit = {}) {
+    super(type, init);
+    this.pointerId = init.pointerId ?? 1;
+    this.pointerType = init.pointerType ?? 'mouse';
+    this.isPrimary = init.isPrimary ?? true;
+  }
+}
+
+if (typeof (globalThis as Record<string, unknown>)['PointerEvent'] === 'undefined') {
+  (globalThis as Record<string, unknown>)['PointerEvent'] = StubPointerEvent;
+  (window as unknown as Record<string, unknown>)['PointerEvent'] = StubPointerEvent;
+}
+
+/** Pointer ids each element has captured (test seam). */
+export const capturedPointers = new WeakMap<Element, Set<number>>();
+
+function captureSet(el: Element): Set<number> {
+  let set = capturedPointers.get(el);
+  if (!set) {
+    set = new Set();
+    capturedPointers.set(el, set);
+  }
+  return set;
+}
+
+/** Pointer ids currently captured by `el`. */
+export function capturedBy(el: Element): number[] {
+  return [...(capturedPointers.get(el) ?? [])];
+}
+
+Object.defineProperty(Element.prototype, 'setPointerCapture', {
+  value: function setPointerCapture(this: Element, id: number) {
+    captureSet(this).add(id);
+  },
+  configurable: true,
+  writable: true,
+});
+
+Object.defineProperty(Element.prototype, 'releasePointerCapture', {
+  value: function releasePointerCapture(this: Element, id: number) {
+    captureSet(this).delete(id);
+  },
+  configurable: true,
+  writable: true,
+});
+
+Object.defineProperty(Element.prototype, 'hasPointerCapture', {
+  value: function hasPointerCapture(this: Element, id: number) {
+    return captureSet(this).has(id);
+  },
+  configurable: true,
+  writable: true,
+});
+
 // ---- ResizeObserver stub --------------------------------------------------
 export const resizeObservers: StubResizeObserver[] = [];
 

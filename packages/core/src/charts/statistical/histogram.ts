@@ -20,7 +20,7 @@ import type { NavContext } from '../../a11y/keyboard';
 import { seriesColor, type DataModel } from '../../model';
 import { LinearScale } from '../../scales/linear';
 import { formatValue } from '../../util';
-import { HIT_RADIUS } from '../../interaction/hittest';
+import { hitRadius } from '../../interaction/hittest';
 import { binCounts, binEdges } from './binning';
 
 export const HISTOGRAM_OVERLAY_ALPHA = 0.7;
@@ -157,8 +157,8 @@ export const histogramDefinition: ChartTypeDefinition = {
     const extra = ctx.geom.extra as HistogramExtra | undefined;
     const L = ctx.layout;
     if (!extra || extra.edgePx.length < 2) return null;
-    if (px < L.plot.x - HIT_RADIUS || px > L.plot.x + L.plot.w + HIT_RADIUS) return null;
-    if (py < L.plot.y - HIT_RADIUS || py > L.plot.y + L.plot.h + HIT_RADIUS) return null;
+    if (px < L.plot.x - hitRadius() || px > L.plot.x + L.plot.w + hitRadius()) return null;
+    if (py < L.plot.y - hitRadius() || py > L.plot.y + L.plot.h + hitRadius()) return null;
     const n = extra.edgePx.length - 1;
     const e0 = extra.edgePx[0] as number;
     const eN = extra.edgePx[n] as number;

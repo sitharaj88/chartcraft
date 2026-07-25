@@ -8,6 +8,9 @@ import { escapeHtml } from '../util';
 const OFFSET = 12;
 const MARGIN = 4;
 
+/** Which side of the pointer the tooltip is tried on first. */
+export type Placement = 'below' | 'above';
+
 export function defaultTooltipHTML(points: TooltipPoint[]): string {
   if (points.length === 0) return '';
   const first = points[0] as TooltipPoint;
@@ -60,14 +63,22 @@ export class Tooltip {
     return this.el.style.display !== 'none';
   }
 
-  show(html: string, clientX: number, clientY: number): void {
+  show(html: string, clientX: number, clientY: number, prefer: Placement = 'below'): void {
     this.el.innerHTML = html;
     this.el.style.display = 'block';
-    this.position(clientX, clientY);
+    this.position(clientX, clientY, prefer);
   }
 
-  /** Position near the pointer, flipped/clamped to stay inside the viewport. */
-  position(clientX: number, clientY: number): void {
+  /**
+   * Position near the pointer, flipped/clamped to stay inside the viewport.
+   *
+   * `prefer` picks which side is TRIED FIRST. `'below'` (the mouse default, and
+   * the historical behavior) sits under the cursor, which never occludes
+   * anything. `'above'` is for touch: the contact point is under a fingertip,
+   * so a tooltip below it is a tooltip the user cannot see. Either way the
+   * other side is used when the preferred one does not fit.
+   */
+  position(clientX: number, clientY: number, prefer: Placement = 'below'): void {
     const win = this.el.ownerDocument.defaultView;
     const vw = win?.innerWidth ?? 1024;
     const vh = win?.innerHeight ?? 768;
@@ -78,8 +89,14 @@ export class Tooltip {
     if (left + w + MARGIN > vw) left = clientX - OFFSET - w; // flip to the left
     left = Math.max(MARGIN, Math.min(left, vw - w - MARGIN));
 
-    let top = clientY + OFFSET;
-    if (top + h + MARGIN > vh) top = clientY - OFFSET - h; // flip above
+    let top: number;
+    if (prefer === 'above') {
+      top = clientY - OFFSET - h;
+      if (top < MARGIN) top = clientY + OFFSET; // flip below
+    } else {
+      top = clientY + OFFSET;
+      if (top + h + MARGIN > vh) top = clientY - OFFSET - h; // flip above
+    }
     top = Math.max(MARGIN, Math.min(top, vh - h - MARGIN));
 
     this.el.style.left = `${left}px`;

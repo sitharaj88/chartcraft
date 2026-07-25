@@ -193,6 +193,12 @@ interface ZoomState {
   bounds: Bounds;
   drag: DragState | null;
   brush: Rect | null;
+  /**
+   * The pointer that owns the drag. Captured on `pointerdown` so a finger that
+   * leaves the canvas mid-brush keeps feeding the gesture, and matched on every
+   * move so a second finger cannot hijack it.
+   */
+  pointerId: number | null;
 }
 
 const STATES = new WeakMap<DecoratorHost, ZoomState>();
@@ -350,8 +356,36 @@ function setAndEmit(st: ZoomState, vp: Viewport | null): boolean {
 
 const ARROWS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'] as const;
 
+/**
+ * Best-effort pointer capture. Absent in jsdom and on ancient UAs, and a stale
+ * id throws — the gesture still works without it (it just ends early if the
+ * finger leaves the canvas), so every failure is swallowed.
+ */
+function capture(canvas: HTMLCanvasElement, id: number | null): void {
+  const el = canvas as HTMLCanvasElement & { setPointerCapture?: (id: number) => void };
+  if (id === null || typeof el.setPointerCapture !== 'function') return;
+  try {
+    el.setPointerCapture(id);
+  } catch {
+    // Not capturable — carry on uncaptured.
+  }
+}
+
+function release(canvas: HTMLCanvasElement, id: number | null): void {
+  const el = canvas as HTMLCanvasElement & {
+    releasePointerCapture?: (id: number) => void;
+    hasPointerCapture?: (id: number) => boolean;
+  };
+  if (id === null || typeof el.releasePointerCapture !== 'function') return;
+  try {
+    if (el.hasPointerCapture?.(id) !== false) el.releasePointerCapture(id);
+  } catch {
+    // `pointerup` already released it implicitly.
+  }
+}
+
 function attachZoom(host: DecoratorHost): () => void {
-  const st: ZoomState = { host, bounds: domainsOf(host.context()), drag: null, brush: null };
+  const st: ZoomState = { host, bounds: domainsOf(host.context()), drag: null, brush: null, pointerId: null };
   STATES.set(host, st);
 
   const canvas = host.canvas;
@@ -383,6 +417,12 @@ function attachZoom(host: DecoratorHost): () => void {
       base: domainsOf(ctx),
       startViewport: host.getViewport(),
     };
+    // TOUCH: own the pointer for the whole drag, and claim BOTH scroll axes
+    // while it lasts — a brush/pan that starts horizontally must not be handed
+    // to the page scroller when the finger drifts vertically.
+    st.pointerId = typeof me.pointerId === 'number' ? me.pointerId : null;
+    capture(canvas, st.pointerId);
+    host.setGestureLock(true);
     if (mode === 'brush') {
       st.brush = brushRect(ctx, st.drag);
       host.requestRender();
@@ -392,6 +432,8 @@ function attachZoom(host: DecoratorHost): () => void {
   const onPointerMove = (e: Event): void => {
     if (!st.drag) return;
     const me = e as PointerEvent;
+    // A second finger is not this gesture.
+    if (st.pointerId !== null && typeof me.pointerId === 'number' && me.pointerId !== st.pointerId) return;
     const ctx = host.context();
     const { px, py } = canvasPoint(canvas, me);
     st.drag.curX = px;
@@ -408,14 +450,32 @@ function attachZoom(host: DecoratorHost): () => void {
     e.stopPropagation();
   };
 
-  const onPointerUp = (): void => {
+  /**
+   * End the gesture. `cancelled` is a `pointercancel`: the UA took the pointer
+   * away (it decided the touch was a scroll, a system gesture interrupted, the
+   * device was rotated), so the drag is ABORTED rather than applied — zooming
+   * to a brush the user never finished drawing is not what they asked for. A
+   * pan has already moved the viewport on every move, so a cancelled pan is
+   * reported where it landed rather than silently rolled back.
+   */
+  const endDrag = (e?: Event, cancelled = false): void => {
     const drag = st.drag;
+    const pe = e as PointerEvent | undefined;
+    if (drag && st.pointerId !== null && pe && typeof pe.pointerId === 'number' && pe.pointerId !== st.pointerId) {
+      return;
+    }
+    release(canvas, st.pointerId);
+    st.pointerId = null;
+    // Always paired with the `setGestureLock(true)` in `onPointerDown`, even
+    // when no drag was in progress — a lock left raised would pin the page.
+    host.setGestureLock(false);
     if (!drag) return;
     st.drag = null;
     const ctx = host.context();
     if (drag.mode === 'brush') {
       st.brush = null;
       host.requestRender();
+      if (cancelled) return;
       const vp = brushViewport(ctx, drag, st.bounds);
       if (vp) setAndEmit(st, vp);
       return;
@@ -423,6 +483,9 @@ function attachZoom(host: DecoratorHost): () => void {
     const now = host.getViewport();
     if (!sameViewport(drag.startViewport, now)) host.emit('zoom', zoomPayload(now));
   };
+
+  const onPointerUp = (e?: Event): void => endDrag(e, false);
+  const onPointerCancel = (e?: Event): void => endDrag(e, true);
 
   const onWheel = (e: Event): void => {
     const we = e as WheelEvent;
@@ -492,7 +555,7 @@ function attachZoom(host: DecoratorHost): () => void {
   canvas.addEventListener('pointerdown', onPointerDown);
   root.addEventListener('pointermove', onPointerMove, true);
   doc.addEventListener('pointerup', onPointerUp);
-  doc.addEventListener('pointercancel', onPointerUp);
+  doc.addEventListener('pointercancel', onPointerCancel);
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('dblclick', onDblClick);
   root.addEventListener('keydown', onKeyDown, true);
@@ -501,7 +564,7 @@ function attachZoom(host: DecoratorHost): () => void {
     canvas.removeEventListener('pointerdown', onPointerDown);
     root.removeEventListener('pointermove', onPointerMove, true);
     doc.removeEventListener('pointerup', onPointerUp);
-    doc.removeEventListener('pointercancel', onPointerUp);
+    doc.removeEventListener('pointercancel', onPointerCancel);
     canvas.removeEventListener('wheel', onWheel);
     canvas.removeEventListener('dblclick', onDblClick);
     root.removeEventListener('keydown', onKeyDown, true);

@@ -77,6 +77,7 @@ import {
 } from './decorate';
 import { a11yTableToCSV, a11yTableToJSON, canvasToBlob } from './export';
 import { registerBuiltinDecorators } from './features';
+import { COARSE_HIT_RADIUS, HIT_RADIUS, coarsePointerMedia, withHitRadius } from './interaction/hittest';
 import { Announcer, applyTableLimit, buildDataTable, generateAriaLabel, visuallyHide } from './a11y';
 import { navigate, type NavPosition } from './a11y/keyboard';
 import { Animator, lerp, prefersReducedMotion } from './animation';
@@ -85,6 +86,40 @@ import { caf, deepMerge, formatTemporal, formatValue, raf, uid } from './util';
 export const version = '0.3.0';
 
 type RenderReason = ChartEventMap['render']['reason'];
+
+/**
+ * The three pointer classes the pipeline distinguishes.
+ *
+ * An event with NO `pointerType` (a `click`, a `blur`, a synthetic MouseEvent)
+ * is treated as `'mouse'`, which is what keeps the mouse path byte-identical:
+ * every touch-specific branch is entered only on a POSITIVE `'touch'`/`'pen'`
+ * signal, never on the absence of one.
+ */
+type PointerKind = 'mouse' | 'touch' | 'pen';
+
+function pointerKindOf(e: Event | null | undefined): PointerKind {
+  const t = (e as { pointerType?: unknown } | null | undefined)?.pointerType;
+  return t === 'touch' || t === 'pen' ? t : 'mouse';
+}
+
+/**
+ * Whether THIS event came from a coarse (finger-sized) pointer.
+ *
+ * Per-event `pointerType` first, because it is the only signal that is right on
+ * a hybrid device: a touchscreen laptop matches `(pointer: coarse)` for its
+ * whole session, and answering "coarse" to its trackpad would silently triple
+ * every mouse hit target. The media query is the fallback for events that carry
+ * no `pointerType` at all — a `click` (always a MouseEvent, even when a tap
+ * synthesized it), or a UA without PointerEvent.
+ *
+ * A stylus is `pen` and is FINE: it has a visible, pixel-precise tip.
+ */
+function coarsePointer(e: Event | null | undefined): boolean {
+  const t = (e as { pointerType?: unknown } | null | undefined)?.pointerType;
+  if (t === 'touch') return true;
+  if (t === 'mouse' || t === 'pen') return false;
+  return coarsePointerMedia();
+}
 
 export function createChart(container: HTMLElement, options: ChartOptions): Chart {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -157,10 +192,34 @@ class ChartImpl implements Chart {
   private hoverRaf: number | null = null;
   private lastSize: { w: number; h: number; dpr: number } | null = null;
 
+  /**
+   * The touch/pen contact currently driving hover, or null. A touch has no
+   * hover phase, so "is a finger down on this chart" has to be tracked
+   * explicitly; it also lets a second finger be ignored rather than fighting
+   * the first for the tooltip.
+   */
+  private touchPointerId: number | null = null;
+  /**
+   * True while the document-level "dismiss the touch tooltip" listeners are
+   * mounted. See `armTouchDismiss`.
+   */
+  private touchDismissArmed = false;
+  /**
+   * True while a decorator gesture (a brush/pan drag) owns BOTH axes and the
+   * canvas must therefore refuse to let the browser scroll the page. Raised and
+   * lowered by `DecoratorHost.setGestureLock`; folded into `touchAction()`.
+   */
+  private gestureLock = false;
+
   private onPointerMove: (e: PointerEvent | MouseEvent) => void;
-  private onPointerLeave: () => void;
+  private onPointerDown: (e: PointerEvent | MouseEvent) => void;
+  private onPointerUp: (e: PointerEvent | MouseEvent) => void;
+  private onPointerCancel: (e: PointerEvent | MouseEvent) => void;
+  private onPointerLeave: (e?: Event) => void;
   private onClick: (e: MouseEvent) => void;
   private onKeyDown: (e: KeyboardEvent) => void;
+  private onDocPointerDown: (e: Event) => void;
+  private onDocScroll: () => void;
 
   constructor(container: HTMLElement, options: ChartOptions) {
     this.el = container;
@@ -188,6 +247,8 @@ class ChartImpl implements Chart {
     this.canvas = doc.createElement('canvas');
     this.canvas.className = 'chartcraft-canvas';
     this.canvas.style.display = 'block';
+    // Touch gestures are the browser's until we claim them — see `touchAction`.
+    this.canvas.style.touchAction = this.touchAction();
     this.wrap.appendChild(this.canvas);
 
     this.legend = new Legend(doc, { onToggle: (id) => this.toggleSeries(id) });
@@ -205,15 +266,29 @@ class ChartImpl implements Chart {
     this.renderer = new CanvasRenderer(this.canvas);
 
     // Interaction (pointer events unify mouse/touch/pen).
+    //
+    // `pointerdown`/`pointerup`/`pointercancel` exist for TOUCH: a finger has no
+    // hover phase, so a tap is down -> up -> click with no `pointermove` in
+    // between, and `handlePointerMove` — the only thing that sets hover and
+    // shows the tooltip — would never run. On mouse these three handlers return
+    // immediately (see each one), so the mouse path is exactly what it was.
     this.onPointerMove = (e) => this.handlePointerMove(e);
-    this.onPointerLeave = () => this.handlePointerLeave();
+    this.onPointerDown = (e) => this.handlePointerDown(e);
+    this.onPointerUp = (e) => this.handlePointerUp(e);
+    this.onPointerCancel = (e) => this.handlePointerCancel(e);
+    this.onPointerLeave = (e) => this.handlePointerLeave(e);
     this.onClick = (e) => this.handleClick(e);
     this.onKeyDown = (e) => this.handleKeyDown(e);
+    this.onDocPointerDown = (e) => this.handleDocumentPointerDown(e);
+    this.onDocScroll = () => this.dismissTouchInspection();
     this.canvas.addEventListener('pointermove', this.onPointerMove as EventListener);
-    this.canvas.addEventListener('pointerleave', this.onPointerLeave);
+    this.canvas.addEventListener('pointerdown', this.onPointerDown as EventListener);
+    this.canvas.addEventListener('pointerup', this.onPointerUp as EventListener);
+    this.canvas.addEventListener('pointercancel', this.onPointerCancel as EventListener);
+    this.canvas.addEventListener('pointerleave', this.onPointerLeave as EventListener);
     this.canvas.addEventListener('click', this.onClick);
     this.canvas.addEventListener('keydown', this.onKeyDown);
-    this.canvas.addEventListener('blur', this.onPointerLeave);
+    this.canvas.addEventListener('blur', this.onPointerLeave as EventListener);
 
     // Responsive by default: ResizeObserver coalesced through rAF.
     if (typeof ResizeObserver !== 'undefined') {
@@ -330,10 +405,16 @@ class ChartImpl implements Chart {
     this.unwatchScheme();
     this.unwatchForced();
     this.canvas.removeEventListener('pointermove', this.onPointerMove as EventListener);
-    this.canvas.removeEventListener('pointerleave', this.onPointerLeave);
+    this.canvas.removeEventListener('pointerdown', this.onPointerDown as EventListener);
+    this.canvas.removeEventListener('pointerup', this.onPointerUp as EventListener);
+    this.canvas.removeEventListener('pointercancel', this.onPointerCancel as EventListener);
+    this.canvas.removeEventListener('pointerleave', this.onPointerLeave as EventListener);
     this.canvas.removeEventListener('click', this.onClick);
     this.canvas.removeEventListener('keydown', this.onKeyDown);
-    this.canvas.removeEventListener('blur', this.onPointerLeave);
+    this.canvas.removeEventListener('blur', this.onPointerLeave as EventListener);
+    // The touch-dismissal listeners live on the DOCUMENT, so nothing else can
+    // collect them when the chart's own subtree is removed.
+    this.disarmTouchDismiss();
     this.renderer.destroy();
     this.tooltip.destroy();
     this.legend.destroy();
@@ -620,6 +701,7 @@ class ChartImpl implements Chart {
       requestRender: () => this.scheduleHoverDraw(),
       setViewport: (v) => this.applyViewport(v),
       getViewport: () => this.viewport,
+      setGestureLock: (locked) => this.setGestureLock(locked),
       emit: (type, ev) => this.emitter.emit(type, ev),
     };
     return this.hostRef;
@@ -895,6 +977,10 @@ class ChartImpl implements Chart {
     this.root.style.background = t.surface;
     this.root.style.flexDirection = o.legend.position === 'right' ? 'row' : 'column';
 
+    // Recomputed here so an `update()` that turns zoom on (or changes its axis)
+    // takes effect immediately — `touchAction` reads the RESOLVED options.
+    this.canvas.style.touchAction = this.touchAction();
+
     // Legend content comes from the type definition: item entries (series
     // for cartesian charts, non-toggleable slices for pie/donut, ...) or a
     // custom element (heatmap's gradient color scale) mounted in the items'
@@ -1155,8 +1241,84 @@ class ChartImpl implements Chart {
     return { px: e.clientX - rect.left, py: e.clientY - rect.top };
   }
 
-  private hitTest(px: number, py: number): HoverState | null {
-    return this.def.hitTest(this.geomContext(), px, py);
+  /**
+   * The canvas's `touch-action`, i.e. which gestures the BROWSER keeps.
+   *
+   * POLICY (v0.3.3) — the default is `pan-y`, never `none`:
+   *
+   * - `auto` (the old, unset value) is broken: the browser waits to see whether
+   *   a touch is a scroll, then fires `pointercancel` and stops delivering
+   *   pointer events, so a scrub along a line never reaches us at all. This is
+   *   also why the bug reproduced in DevTools device emulation, which applies
+   *   real `touch-action` semantics.
+   * - `none` everywhere is worse than the bug it fixes. Charts are large on a
+   *   phone — frequently most of the viewport — so a user swiping vertically to
+   *   scroll the page would find the page pinned wherever a chart is under
+   *   their thumb. Trapping the document to serve a tooltip is not a trade we
+   *   are willing to make.
+   * - `pan-y` keeps VERTICAL page scrolling with the browser (the gesture users
+   *   need most and expect to always work) and hands us everything else: taps,
+   *   long presses, and horizontal drags — which is precisely the axis a
+   *   scrub, a brush and a pan use on a time-series chart.
+   *
+   * It escalates to `none` in exactly two cases, both of which genuinely need
+   * both axes and neither of which is on by default:
+   *
+   * 1. `zoom` with `axis: 'y' | 'xy'` and a drag gesture enabled — a vertical
+   *    brush/pan IS a vertical drag, so it cannot coexist with `pan-y`.
+   * 2. While a brush/pan drag is actually in progress (`gestureLock`), so that a
+   *    gesture that started horizontally is not stolen mid-drag when the finger
+   *    wanders vertically.
+   */
+  private touchAction(): string {
+    if (this.gestureLock) return 'none';
+    const z = this.opts.zoom;
+    if (z.enabled && (z.axis === 'y' || z.axis === 'xy') && (z.drag || z.pan)) return 'none';
+    return 'pan-y';
+  }
+
+  /** `DecoratorHost.setGestureLock` — see `touchAction`. */
+  private setGestureLock(locked: boolean): void {
+    if (this.destroyed || this.gestureLock === locked) return;
+    this.gestureLock = locked;
+    this.canvas.style.touchAction = this.touchAction();
+  }
+
+  /**
+   * Hit-test at the canvas point, with the hit radius this POINTER deserves:
+   * 24px for a cursor or a stylus, 44px for a fingertip. See
+   * `interaction/hittest.ts` for why the radius is ambient rather than a
+   * parameter of all 39 `hitTest` stages.
+   */
+  private hitTest(px: number, py: number, e?: Event | null): HoverState | null {
+    const r = coarsePointer(e) ? COARSE_HIT_RADIUS : HIT_RADIUS;
+    return withHitRadius(r, () => this.def.hitTest(this.geomContext(), px, py));
+  }
+
+  /** Best-effort pointer capture: absent in jsdom, and stale ids throw. */
+  private capturePointer(e: PointerEvent | MouseEvent): void {
+    const id = (e as PointerEvent).pointerId;
+    const el = this.canvas as HTMLCanvasElement & { setPointerCapture?: (id: number) => void };
+    if (typeof id !== 'number' || typeof el.setPointerCapture !== 'function') return;
+    try {
+      el.setPointerCapture(id);
+    } catch {
+      // Capture is an optimization, never a correctness requirement.
+    }
+  }
+
+  private releasePointer(e: PointerEvent | MouseEvent): void {
+    const id = (e as PointerEvent).pointerId;
+    const el = this.canvas as HTMLCanvasElement & {
+      releasePointerCapture?: (id: number) => void;
+      hasPointerCapture?: (id: number) => boolean;
+    };
+    if (typeof id !== 'number' || typeof el.releasePointerCapture !== 'function') return;
+    try {
+      if (el.hasPointerCapture?.(id) !== false) el.releasePointerCapture(id);
+    } catch {
+      // Already released implicitly by `pointerup` — nothing to undo.
+    }
   }
 
   private pointEventFor(si: number, pi: number, clientX: number, clientY: number, native: Event | null): PointEvent | null {
@@ -1175,10 +1337,80 @@ class ChartImpl implements Chart {
     };
   }
 
+  /**
+   * TAP TO INSPECT (touch/pen only).
+   *
+   * A finger never hovers, so this is the touch equivalent of the first
+   * `pointermove` a mouse would have produced: it sets hover, emits
+   * `pointenter` and shows the tooltip at the contact point. Everything after
+   * that is shared with the mouse path — including `pointermove` while the
+   * finger stays down, which is what makes scrubbing along a line work.
+   *
+   * Returns immediately for a mouse: a mouse has already hovered by the time it
+   * presses, so `pointerdown` has nothing to add and must not change anything.
+   */
+  private handlePointerDown(e: PointerEvent | MouseEvent): void {
+    if (this.destroyed || pointerKindOf(e) === 'mouse') return;
+    // Ignore a second finger: the first one owns the inspection.
+    const id = (e as PointerEvent).pointerId;
+    if (this.touchPointerId !== null && typeof id === 'number' && id !== this.touchPointerId) return;
+    this.touchPointerId = typeof id === 'number' ? id : 0;
+    // A new tap supersedes whatever the last one left on screen.
+    this.disarmTouchDismiss();
+    // Keep the gesture even if the finger slides off the canvas mid-scrub.
+    this.capturePointer(e);
+    this.inspectAt(e);
+  }
+
+  /**
+   * A touch's `pointerup`. The inspection deliberately SURVIVES it: a mouse
+   * user keeps the tooltip by keeping the cursor still, and the touch
+   * equivalent of "keep it" is "do not take it away the instant the finger
+   * lifts" — otherwise the tooltip is visible only while it is covered by the
+   * finger that summoned it. It is dismissed by the next tap outside the chart,
+   * by a scroll, or replaced by the next tap inside it.
+   */
+  private handlePointerUp(e: PointerEvent | MouseEvent): void {
+    if (this.destroyed || pointerKindOf(e) === 'mouse') return;
+    this.releasePointer(e);
+    this.touchPointerId = null;
+    if (this.hover || this.tooltip.visible) this.armTouchDismiss();
+  }
+
+  /**
+   * The gesture was taken away from us (the UA decided it was a scroll, a
+   * system gesture interrupted it, the pointer was destroyed). No `pointerup`
+   * and no `pointerleave` follow, so this is the ONLY chance to drop the hover
+   * state — without it a cancelled touch leaves a stale highlight and a tooltip
+   * pinned to a point the user is no longer touching.
+   */
+  private handlePointerCancel(e: PointerEvent | MouseEvent): void {
+    if (this.destroyed) return;
+    this.releasePointer(e);
+    this.touchPointerId = null;
+    this.disarmTouchDismiss();
+    this.clearHover();
+  }
+
+  /** Set hover + tooltip from a pointer event's position. */
+  private inspectAt(e: PointerEvent | MouseEvent): void {
+    this.handlePointerMove(e);
+  }
+
   private handlePointerMove(e: PointerEvent | MouseEvent): void {
     if (this.destroyed) return;
+    // While a finger is down, only THAT finger scrubs.
+    const id = (e as PointerEvent).pointerId;
+    if (
+      this.touchPointerId !== null &&
+      pointerKindOf(e) !== 'mouse' &&
+      typeof id === 'number' &&
+      id !== this.touchPointerId
+    ) {
+      return;
+    }
     const { px, py } = this.canvasPoint(e);
-    const hit = this.hitTest(px, py);
+    const hit = this.hitTest(px, py, e);
     const changed = (hit?.si !== this.hover?.si || hit?.pi !== this.hover?.pi) && !(hit === null && this.hover === null);
     if (changed) {
       if (this.hover) {
@@ -1192,17 +1424,39 @@ class ChartImpl implements Chart {
       }
       this.scheduleHoverDraw();
     }
+    // A finger sits ON the point it is inspecting, so a tooltip placed below
+    // the contact (the mouse default) is under the fingertip. Touch/pen prefer
+    // above; `Tooltip.position` still flips when there is no room.
+    const prefer = pointerKindOf(e) === 'mouse' ? 'below' : 'above';
     if (hit && this.opts.tooltip.show) {
-      this.showTooltipFor(hit, e.clientX, e.clientY);
+      this.showTooltipFor(hit, e.clientX, e.clientY, prefer);
     } else if (!hit) {
       this.tooltip.hide();
     } else if (this.tooltip.visible) {
-      this.tooltip.position(e.clientX, e.clientY);
+      this.tooltip.position(e.clientX, e.clientY, prefer);
     }
   }
 
-  private handlePointerLeave(): void {
+  /**
+   * `pointerleave` — and `blur`, which passes no event at all.
+   *
+   * On touch this fires the INSTANT the finger lifts (the implicit pointer
+   * capture is released and the pointer ceases to exist), so treating it as
+   * "the user moved away" would hide every tooltip a tap ever showed, roughly
+   * one frame after showing it. For touch/pen the inspection is kept and the
+   * document-level dismissal is armed instead; the mouse path is untouched.
+   */
+  private handlePointerLeave(e?: Event): void {
     if (this.destroyed) return;
+    if (pointerKindOf(e) !== 'mouse' && (this.hover !== null || this.tooltip.visible)) {
+      this.armTouchDismiss();
+      return;
+    }
+    this.clearHover();
+  }
+
+  /** Drop hover/focus/tooltip and repaint. The mouse `pointerleave` behavior. */
+  private clearHover(): void {
     if (this.hover) {
       const ev = this.pointEventFor(this.hover.si, this.hover.pi, -1, -1, null);
       if (ev) this.emitter.emit('pointleave', ev);
@@ -1213,12 +1467,57 @@ class ChartImpl implements Chart {
     this.scheduleHoverDraw();
   }
 
+  // ------------------------------------------------- touch dismissal (document)
+
+  /**
+   * Mount the "this inspection is over" listeners.
+   *
+   * They have to be on the DOCUMENT because the events that end a touch
+   * inspection happen outside the chart: a tap somewhere else on the page, or a
+   * scroll (which does not bubble, hence the capture phase). They are mounted
+   * lazily — a chart that is only ever used with a mouse never adds them — and
+   * are removed on the next tap, on dismissal and unconditionally in
+   * `destroy()`.
+   */
+  private armTouchDismiss(): void {
+    if (this.touchDismissArmed || this.destroyed) return;
+    const doc = this.root.ownerDocument;
+    doc.addEventListener('pointerdown', this.onDocPointerDown, true);
+    doc.addEventListener('scroll', this.onDocScroll, true);
+    this.touchDismissArmed = true;
+  }
+
+  private disarmTouchDismiss(): void {
+    if (!this.touchDismissArmed) return;
+    const doc = this.root.ownerDocument;
+    doc.removeEventListener('pointerdown', this.onDocPointerDown, true);
+    doc.removeEventListener('scroll', this.onDocScroll, true);
+    this.touchDismissArmed = false;
+  }
+
+  /** A tap that landed outside this chart ends the inspection. */
+  private handleDocumentPointerDown(e: Event): void {
+    const target = e.target;
+    // Inside the chart: the canvas's own `pointerdown` re-inspects instead.
+    if (target instanceof Node && this.root.contains(target)) return;
+    this.dismissTouchInspection();
+  }
+
+  private dismissTouchInspection(): void {
+    if (this.destroyed) return;
+    this.disarmTouchDismiss();
+    this.clearHover();
+  }
+
   private handleClick(e: MouseEvent): void {
     if (this.destroyed) return;
     const { px, py } = this.canvasPoint(e);
     // Decorators (annotations) claim clicks before datum hit-testing.
     if (this.decoratorClick(px, py, e)) return;
-    const hit = this.hitTest(px, py);
+    // A `click` is a MouseEvent even when a tap synthesized it, so it carries no
+    // `pointerType` — `coarsePointer` falls back to the media query here, which
+    // is the right answer on a phone and on a desktop alike.
+    const hit = this.hitTest(px, py, e);
     if (hit) {
       const ev = this.pointEventFor(hit.si, hit.pi, e.clientX, e.clientY, e);
       if (ev) this.emitter.emit('pointclick', ev);
@@ -1345,7 +1644,12 @@ class ChartImpl implements Chart {
     };
   }
 
-  private showTooltipFor(hit: HoverState, clientX: number, clientY: number): void {
+  private showTooltipFor(
+    hit: HoverState,
+    clientX: number,
+    clientY: number,
+    prefer: 'below' | 'above' = 'below',
+  ): void {
     const typePoints = this.def.tooltipPoints(
       {
         ...this.geomContext(),
@@ -1365,7 +1669,7 @@ class ChartImpl implements Chart {
       return;
     }
     const html = this.opts.tooltip.format ? this.opts.tooltip.format(points) : defaultTooltipHTML(points);
-    this.tooltip.show(html, clientX, clientY);
+    this.tooltip.show(html, clientX, clientY, prefer);
   }
 
   // ------------------------------------------------------------- legend flow

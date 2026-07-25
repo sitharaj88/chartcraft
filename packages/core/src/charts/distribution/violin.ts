@@ -32,7 +32,7 @@ import { seriesColor } from '../../model';
 import { BandScale } from '../../scales/band';
 import { LinearScale } from '../../scales/linear';
 import { formatValue } from '../../util';
-import { HIT_RADIUS } from '../../interaction/hittest';
+import { hitRadius } from '../../interaction/hittest';
 import { quantileR7, summarizeBox, type FiveNumberSummary } from '../statistical/stats';
 
 export const VIOLIN_FILL_ALPHA = 0.35;
@@ -346,7 +346,7 @@ export const violinDefinition: ChartTypeDefinition = {
     const L = ctx.layout;
     const band = L.xScale instanceof BandScale ? L.xScale : null;
     if (!extra || !band) return null;
-    if (py < L.plot.y - HIT_RADIUS || py > L.plot.y + L.plot.h + HIT_RADIUS) return null;
+    if (py < L.plot.y - hitRadius() || py > L.plot.y + L.plot.h + hitRadius()) return null;
     const bandIdx = band.invertIndex(px);
     if (bandIdx < 0) return null;
     let best: HoverState | null = null;

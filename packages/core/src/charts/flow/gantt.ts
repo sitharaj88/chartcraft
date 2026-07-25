@@ -27,7 +27,7 @@ import type { NavContext } from '../../a11y/keyboard';
 import type { DecorationLayer } from '../../decorate';
 import { TimeScale } from '../../scales/time';
 import { LinearScale } from '../../scales/linear';
-import { HIT_RADIUS } from '../../interaction/hittest';
+import { hitRadius } from '../../interaction/hittest';
 import { contrastInk } from '../matrix/color-scale';
 import { fitText, firstVisibleSeries, hideLegendByDefault, singleSeriesData } from './shared';
 import {
@@ -351,7 +351,7 @@ export const ganttDefinition: ChartTypeDefinition = {
       if (!bar) continue;
       if (py < bar.rowY || py > bar.rowY + bar.rowH) continue;
       // Full row band vertically; the bar plus a generous margin horizontally.
-      if (px >= bar.x - HIT_RADIUS && px <= bar.x + bar.w + HIT_RADIUS) {
+      if (px >= bar.x - hitRadius() && px <= bar.x + bar.w + hitRadius()) {
         return { si: extra.si, pi: bar.taskIndex };
       }
     }

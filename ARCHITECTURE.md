@@ -89,8 +89,19 @@ examples/    — runnable vanilla HTML demos against the built core
 
 6. **Interactions ship by default:** crosshair + shared tooltip on line/area,
    per-mark tooltip on bar/scatter/pie, legend toggling, hover highlight with
-   hit targets larger than the mark. All interaction is pointer-event based
-   (mouse/touch/pen unified).
+   hit targets larger than the mark. All interaction is pointer-event based —
+   one hit-testing path for mouse, touch and pen — but touch is treated as its
+   own input, not as a mouse that happens to have no cursor:
+   - a **tap** inspects (`pointerdown` sets hover and shows the tooltip; a
+     finger produces no `pointermove`, so hover alone would never fire), a drag
+     scrubs, and the tooltip survives the lift because it is invisible under the
+     finger that summoned it;
+   - hit radius is chosen **per event** from `pointerType` — 24px for a cursor
+     or stylus, 44px for a fingertip;
+   - the canvas is **`touch-action: pan-y`**, never `none` by default: the page
+     must keep scrolling over a chart. It escalates to `none` only for vertical
+     zoom drags and for the duration of a brush/pan gesture, which is the only
+     place a decorator may raise it (`DecoratorHost.setGestureLock`).
 
 7. **Wrappers are thin.** They own lifecycle (mount/update/destroy), resize
    observation, and event bridging — nothing else. No chart logic outside core.

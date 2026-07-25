@@ -259,8 +259,24 @@ collapsing to one color is why `candlestick` carries direction in its FILL.
 - Lines: 2px width; markers ≥ 8px diameter with 2px surface ring.
 - Grid: hairline, y-only by default; axis text in `textMuted`; no chart junk.
 - Tooltip: follows pointer, never clips viewport, surface bg + hairline border.
+  Placed below a cursor, **above** a touch contact (a finger covers what is
+  under it).
 - Hover hit targets larger than marks (nearest-point within 24px for line/scatter,
-  full column band for bar).
+  full column band for bar). A **coarse** pointer gets **44px** instead of 24px;
+  the choice is made per event from `PointerEvent.pointerType`, so a mouse on a
+  touchscreen device keeps mouse precision.
+- **Touch is a first-class input, not synthesized mouse:**
+  - the canvas is `touch-action: pan-y` — vertical page scrolling over a chart is
+    never blocked. It escalates to `none` only for `zoom` with
+    `axis: 'y' | 'xy'` and a drag gesture enabled, and for the duration of a
+    brush/pan drag;
+  - `pointerdown` with `pointerType` `touch`/`pen` sets hover, emits
+    `pointenter` and shows the tooltip; `pointermove` while down scrubs;
+  - the tooltip survives the finger lifting and is dismissed by the next tap
+    outside the chart or by a scroll (a tap inside replaces it);
+  - `pointercancel` clears hover/tooltip and aborts an in-progress brush;
+  - drag gestures take pointer capture so a finger leaving the canvas does not
+    end them.
 - Legend text in ink colors, never in series color; swatch carries the color.
 
 ## Wrapper contracts

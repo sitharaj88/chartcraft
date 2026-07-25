@@ -29,6 +29,7 @@ asked for exist now, and `packages/core/src/charts/AUTHORING.md` documents them.
 | 91–93 | Testing notes |
 | 94 | Quality-audit finding accepted as documented behaviour |
 | 95–105 | Quality-audit escalations: the architect's rulings |
+| 106 | Touch interaction |
 
 ---
 
@@ -1562,6 +1563,15 @@ The contract fixes the four kinds, the under/over split, clipping and
   (entry 19).
 - While a gesture is in progress the capture-phase `pointermove` listener calls
   `stopPropagation`, so hover/tooltip do not fight the drag.
+- **v0.3.3, touch:** the gesture takes `setPointerCapture` on the canvas (best
+  effort — absent in jsdom, and a stale id throws, so every failure is
+  swallowed) and matches its `pointerId` on every move, so a second finger
+  cannot hijack a drag. It raises `host.setGestureLock(true)` for the duration,
+  which is what puts `touch-action: none` on the canvas while the drag lasts.
+- **v0.3.3:** `pointercancel` now **aborts** a brush instead of committing it
+  (it previously shared the `pointerup` handler). A cancelled PAN is still
+  reported where it landed, because a pan has already moved the viewport on
+  every move and rolling it back would be a second surprise.
 
 ## 90. Downsampling re-runs against the visible window
 
@@ -1917,3 +1927,49 @@ single mark is an error.
 
 `test/robustness.test.ts` pinned the old silence; it now pins the diagnostic,
 including that the message stays actionable rather than merely present.
+
+---
+
+# Touch interaction
+
+## 106. Touch is a first-class input — and four things it deliberately does NOT do
+
+v0.3.3 fixed a reported bug: **no chart of any of the 39 types responded to a
+finger**, on real devices and in DevTools device emulation alike. Three
+independent causes, all confirmed in source: `touch-action` was never set (the
+UA cancelled every gesture it suspected of being a scroll), there was no
+`pointerdown` handler (a tap produces no `pointermove`, and `handlePointerMove`
+was the only thing that set hover), and there was no `pointercancel` handler
+(a cancelled gesture left stale hover state). What is now implemented is in
+`docs/concepts/interactions.md#touch` and the contract's mark & interaction
+spec. What is *not*, and why:
+
+- **No pinch-to-zoom.** `zoom` on touch is brush and pan — the same two
+  gestures the mouse has. A pinch needs two-pointer tracking, a scale anchor and
+  a fight with the UA's own pinch (which `touch-action: none` would have to
+  claim on every zoomable chart, re-introducing the page-trapping problem this
+  fix exists to avoid). It is a feature, not a bug fix, and it is not in this
+  change.
+- **No double-tap reset.** Double-click reset is unchanged and works from a
+  mouse. Whether a double tap synthesizes `dblclick` is UA- and
+  `touch-action`-dependent, so touch users reset with the "reset" affordance the
+  page provides, `Escape` from a keyboard, or `chart.zoomTo(null)`.
+- **No long-press affordance.** A long press is left to the platform (text
+  selection, context menu). ChartCraft claims neither.
+- **The legend's coarse sizing is decided once, when the legend is built.** It
+  reads `matchMedia('(pointer: coarse)')` and does not subscribe to changes, so
+  a device that gains or loses a mouse mid-session keeps the sizing it started
+  with until the next `update()`. Plot hit targets have no such limitation —
+  they read each event's `pointerType`.
+
+Two further consequences worth stating rather than discovering:
+
+- **`touch-action: pan-y` means a horizontal swipe over a chart no longer
+  scrolls a horizontally-scrollable ancestor**, because the chart claims that
+  axis (it is where scrubbing and brushing live). Vertical scrolling — the
+  gesture that actually matters on a phone — is untouched. A chart placed inside
+  a horizontal carousel should be given its own non-chart drag handle.
+- **The tooltip from the tap that started a brush stays on screen during the
+  drag**, because the zoom decorator suppresses hover while a gesture runs. It
+  is cleared the moment the gesture applies a viewport; a drag too short to zoom
+  is a tap, and keeping it is then the correct outcome.

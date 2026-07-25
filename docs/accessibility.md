@@ -172,6 +172,25 @@ user's current reading; one announcement per movement, no queuing floods.
   the user's light/dark preference live. Both built-in themes are validated
   for contrast and CVD-safe series separation against their own surface; see
   [Theming](concepts/theming.md).
+- **`pointer: coarse`** — legend buttons grow to a 44px minimum tap target. Hit
+  targets on the plot do **not** use this query: they read each event's
+  `pointerType`, so a hybrid device gets 44px for its screen and 24px for its
+  mouse rather than one compromise for both.
+
+## Touch
+
+A touchscreen user gets the same information as a mouse user, by tapping:
+
+- **tap a mark** to inspect it — hover, `pointenter` and the tooltip, placed
+  above the contact point so the finger does not cover it;
+- **drag** to scrub the tooltip across the data;
+- the tooltip **survives the finger lifting** (it is unreadable until then) and
+  is dismissed by a tap outside the chart or by scrolling;
+- **vertical page scrolling over a chart is never blocked** — `touch-action` is
+  `pan-y`, and only a chart that opts into vertical zoom drags claims both axes.
+  A visualization that traps the page is an accessibility failure of its own.
+
+Full behavior: [Interactions › Touch](concepts/interactions.md#touch).
 
 ## Not color alone
 
@@ -203,7 +222,9 @@ color perception alone:
 | 2.1.1 Keyboard | A | Full keyboard map: arrows, Home/End, Enter |
 | 2.1.2 No Keyboard Trap | A | Single tab stop; Tab always exits the chart |
 | 2.4.7 Focus Visible | AA | Visible focus ring on the chart, points, and legend buttons |
-| 2.5.8 Target Size (Minimum) | AA | Hit targets exceed marks (24px nearest-point, full bar band) |
+| 2.5.8 Target Size (Minimum) | AA | Hit targets exceed marks (24px nearest-point, full bar band); a **coarse pointer gets 44px**, and legend buttons grow to a 44px minimum height |
+| 2.5.1 Pointer Gestures | A | Everything reachable by tap; no path-based or multi-point gesture is required (brush/pan are optional enhancements of `zoom`) |
+| 2.5.2 Pointer Cancellation | A | `pointercancel` aborts an in-progress brush instead of committing it |
 | 4.1.2 Name, Role, Value | A | Named img role; legend buttons expose pressed state |
 | 4.1.3 Status Messages | AA | `aria-live` announcements for navigation and toggles |
 | 2.3.3 Animation from Interactions | AAA | `prefers-reduced-motion` disables all animation |

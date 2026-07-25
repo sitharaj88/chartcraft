@@ -23,7 +23,7 @@ import { bandIndexFor, seriesColor } from '../../model';
 import { BandScale } from '../../scales/band';
 import { LinearScale } from '../../scales/linear';
 import { clamp, formatTemporal, formatValue } from '../../util';
-import { HIT_RADIUS, nearestByX } from '../../interaction/hittest';
+import { hitRadius, nearestByX } from '../../interaction/hittest';
 
 export const CANDLE_MIN_WIDTH = 3;
 export const CANDLE_MAX_WIDTH = 48;
@@ -307,9 +307,9 @@ export function makeFinancialDefinition(id: 'candlestick' | 'ohlc'): ChartTypeDe
       const extra = ctx.geom.extra as FinancialExtra | undefined;
       const L = ctx.layout;
       if (!extra) return null;
-      if (py < L.plot.y - HIT_RADIUS || py > L.plot.y + L.plot.h + HIT_RADIUS) return null;
+      if (py < L.plot.y - hitRadius() || py > L.plot.y + L.plot.h + hitRadius()) return null;
       const masked = ctx.model.series.map((s, si) => (s.visible ? (ctx.geom.pos[si] ?? []) : []));
-      const hit = nearestByX(masked, px, Math.max(HIT_RADIUS, extra.w));
+      const hit = nearestByX(masked, px, Math.max(hitRadius(), extra.w));
       return hit ? { si: hit.si, pi: hit.pi } : null;
     },
 

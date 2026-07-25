@@ -28,7 +28,7 @@ import type { NormalizedPoint } from '../../data/normalize';
 import { bandIndexFor } from '../../model';
 import { BandScale } from '../../scales/band';
 import { formatValue } from '../../util';
-import { HIT_RADIUS } from '../../interaction/hittest';
+import { hitRadius } from '../../interaction/hittest';
 import { greyRangeSteps } from './shared';
 
 /** Measure bar height as a fraction of the row height ("thin bar"). */
@@ -293,8 +293,8 @@ export const bulletDefinition: ChartTypeDefinition = {
     const L = ctx.layout;
     const band = L.yScale instanceof BandScale ? L.yScale : null;
     if (!extra || !band) return null;
-    if (px < L.plot.x - HIT_RADIUS || px > L.plot.x + L.plot.w + HIT_RADIUS) return null;
-    if (py < L.plot.y - HIT_RADIUS || py > L.plot.y + L.plot.h + HIT_RADIUS) return null;
+    if (px < L.plot.x - hitRadius() || px > L.plot.x + L.plot.w + hitRadius()) return null;
+    if (py < L.plot.y - hitRadius() || py > L.plot.y + L.plot.h + hitRadius()) return null;
     const pi = band.invertIndex(py);
     if (pi < 0) return null;
     return extra.rows.some((row) => row.pi === pi) ? { si: extra.si, pi } : null;

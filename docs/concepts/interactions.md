@@ -2,8 +2,10 @@
 
 Interactions ship by default — tooltips, legend toggling, and hover highlight
 are on unless you turn them off. All pointer handling is `PointerEvent`-based,
-so mouse, touch, and pen behave identically. Everything here also has a
-keyboard path; see [Accessibility](../accessibility.md#keyboard-navigation).
+so mouse, touch, and pen all reach the same hit-testing and the same events —
+but they are not the same gesture, and [Touch](#touch) documents where they
+deliberately differ. Everything here also has a keyboard path; see
+[Accessibility](../accessibility.md#keyboard-navigation).
 
 ## Tooltips
 
@@ -80,6 +82,48 @@ pointer and never clips the viewport.
 **Escape any user-provided strings** you interpolate into the returned HTML —
 `format` output is injected as markup.
 
+## Touch
+
+A finger is not a small mouse. It never hovers, it hides the thing it is
+pointing at, and the browser wants the same gesture in order to scroll the page.
+Touch therefore gets its own path, and the mouse path is untouched by it.
+
+| Gesture | What happens |
+|---|---|
+| Tap a mark | Hover is set, `pointenter` fires, the tooltip appears **above** the contact point, `pointclick` fires |
+| Drag while touching | The tooltip scrubs along the data, exactly like moving a mouse |
+| Lift the finger | The tooltip **stays** — it is only readable once the finger is out of the way |
+| Tap another mark | Replaces the inspection |
+| Tap outside the chart, or scroll | Dismisses it (`pointleave` fires) |
+| Gesture cancelled by the OS | Hover, tooltip and any in-progress brush are dropped |
+
+### Page scrolling still works
+
+The canvas is `touch-action: pan-y`. **Vertical page scrolling over a chart is
+never blocked** — charts are large on a phone, and a page that pins itself
+wherever a chart sits under your thumb is a worse bug than a missing tooltip.
+Everything else (taps, long presses, horizontal drags) reaches the chart, which
+is exactly the axis a scrub, a brush and a pan need on a time-series chart.
+
+It escalates to `touch-action: none` in two cases, both opt-in:
+
+- `zoom` with `axis: 'y'` or `'xy'` **and** a drag gesture enabled — a vertical
+  brush *is* a vertical drag, so it cannot coexist with `pan-y`;
+- for the duration of a brush/pan drag, so a gesture that started horizontally is
+  not stolen mid-drag when the finger wanders.
+
+The value is recomputed on every `update()`, so turning zoom on or changing its
+axis takes effect immediately.
+
+### Bigger targets for a fingertip
+
+The nearest-point hit radius is **24px for a mouse or stylus and 44px for a
+finger** (the WCAG 2.1 target-size minimum). The choice is made **per event**
+from `PointerEvent.pointerType`, not per device: a touchscreen laptop keeps full
+mouse precision for its trackpad and gets finger-sized targets for its screen, in
+the same session. Legend entries grow to a 44px minimum height when the primary
+pointer is coarse.
+
 ## Legend toggling
 
 ```ts
@@ -138,13 +182,19 @@ createChart(el, {
 
 | Input | Action |
 |---|---|
-| Drag (unzoomed) | Brush a region, zoom on release |
+| Drag (unzoomed) | Brush a region, zoom on release — mouse **or finger** |
 | Drag (zoomed) | Pan; `Shift`+drag brushes instead |
 | ctrl/⌘ + wheel | Zoom about the pointer |
 | Double-click | Reset |
 | `Escape` | Reset when zoomed; otherwise clears datum focus |
 | `+` / `-` | Zoom in / out about the window center |
 | `Shift` + arrows | Pan by 10% of the visible span |
+
+A finger drag brushes and pans like a mouse drag. The gesture takes **pointer
+capture**, so it survives the finger leaving the canvas, and it claims both
+scroll axes for its duration (see [Touch](#touch)). A `pointercancel` — the OS
+taking the gesture away — **aborts** a brush rather than zooming to a region the
+user never finished drawing.
 
 `chart.zoomTo(range)` is the programmatic path and `null` resets; the
 [`zoom` event](#event-notes) reports every completed gesture. Band (category)

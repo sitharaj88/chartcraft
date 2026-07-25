@@ -29,7 +29,7 @@ import { axisTickFont, formatCategory } from '../../layout';
 import { bandIndexFor, seriesColor } from '../../model';
 import { BandScale } from '../../scales/band';
 import { formatValue } from '../../util';
-import { HIT_RADIUS, nearestByX, nearestPoint } from '../../interaction/hittest';
+import { hitRadius, nearestByX, nearestPoint } from '../../interaction/hittest';
 import { linePath } from '../curves';
 import { DOT_RING, SLOPE_DOT_RADIUS } from './shared';
 
@@ -269,7 +269,7 @@ export const slopeDefinition: ChartTypeDefinition = {
 
   hitTest(ctx, px, py): HoverState | null {
     const L = ctx.layout;
-    if (py < L.plot.y - HIT_RADIUS || py > L.plot.y + L.plot.h + HIT_RADIUS) return null;
+    if (py < L.plot.y - hitRadius() || py > L.plot.y + L.plot.h + hitRadius()) return null;
     const masked = ctx.model.series.map((s, si) => (s.visible ? (ctx.geom.pos[si] ?? []) : []));
     const near = nearestPoint(masked, px, py);
     if (near) return { si: near.si, pi: near.pi };

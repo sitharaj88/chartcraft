@@ -170,8 +170,15 @@ Stage notes:
   text/clipRect`). Respect the dataviz rules in the contract: ink-colored
   text, status colors from `theme.up/down/neutral`, no chart junk.
 - `decorations(ctx, layer)` — **optional** overlay stage, see below.
-- `hitTest` — hit targets larger than marks (`HIT_RADIUS` = 24px; helpers
-  `nearestPoint`, `nearestByX`, `sliceAt` in `interaction/hittest.ts`).
+- `hitTest` — hit targets larger than marks (helpers `nearestPoint`,
+  `nearestByX`, `sliceAt` in `interaction/hittest.ts`).
+
+  **Call `hitRadius()`, never the `HIT_RADIUS` constant.** The radius is
+  ambient and depends on the POINTER: 24px for a mouse or stylus, 44px
+  (`COARSE_HIT_RADIUS`) for a fingertip. `chart.ts` sets it for the duration of
+  one `hitTest` call from the event's `pointerType`, so a type that hard-codes
+  24 silently keeps mouse-sized targets for touch users. The helpers default to
+  `hitRadius()` already — only explicit bounds checks need the call.
 - `a11yTable(ctx, opts?)` — first column is the row-header column. Use
   shape-appropriate columns (OHLC: open/high/low/close; treemap: indented label
   + value + share). The pipeline builds the DOM, the caption AND `exportData()`.

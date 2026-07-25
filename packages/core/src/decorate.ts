@@ -104,6 +104,18 @@ export interface DecoratorHost {
   /** Set/clear the zoom viewport: re-runs downsampling, layout and paint. */
   setViewport(v: Viewport | null): void;
   getViewport(): Viewport | null;
+  /**
+   * Claim BOTH touch axes for the duration of a drag gesture (`touch-action:
+   * none` on the canvas), and release them afterwards.
+   *
+   * The canvas is normally `touch-action: pan-y` so a user can still scroll the
+   * page vertically with a finger on the chart. A decorator that is mid-DRAG
+   * needs the vertical axis too — otherwise a brush that starts horizontally is
+   * stolen by the browser the moment the finger wanders — so it raises the lock
+   * on `pointerdown` and lowers it on `pointerup`/`pointercancel`. ALWAYS pair
+   * the calls: a lock left raised pins the page.
+   */
+  setGestureLock(locked: boolean): void;
   /** Emit a public chart event. */
   emit<K extends keyof ChartEventMap>(type: K, ev: ChartEventMap[K]): void;
 }

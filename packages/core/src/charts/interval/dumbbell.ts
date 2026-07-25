@@ -25,7 +25,7 @@ import type { NavContext } from '../../a11y/keyboard';
 import { bandIndexFor } from '../../model';
 import { BandScale } from '../../scales/band';
 import { formatValue } from '../../util';
-import { HIT_RADIUS } from '../../interaction/hittest';
+import { hitRadius } from '../../interaction/hittest';
 import { DOT_RING, DUMBBELL_DOT_RADIUS, formatDelta, rangeOf, slotCenters, slotWidth } from './shared';
 
 /** Hairline connector width. */
@@ -145,8 +145,8 @@ export const dumbbellDefinition: ChartTypeDefinition = {
     const L = ctx.layout;
     const band = L.xScale instanceof BandScale ? L.xScale : null;
     if (!band) return null;
-    if (py < L.plot.y - HIT_RADIUS || py > L.plot.y + L.plot.h + HIT_RADIUS) return null;
-    if (px < L.plot.x - HIT_RADIUS || px > L.plot.x + L.plot.w + HIT_RADIUS) return null;
+    if (py < L.plot.y - hitRadius() || py > L.plot.y + L.plot.h + hitRadius()) return null;
+    if (px < L.plot.x - hitRadius() || px > L.plot.x + L.plot.w + hitRadius()) return null;
     const bandIdx = band.invertIndex(px);
     if (bandIdx < 0) return null;
     // Nearest dumbbell in that band, preferring one whose low..high span

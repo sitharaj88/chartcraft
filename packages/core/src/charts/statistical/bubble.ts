@@ -13,7 +13,7 @@ import type { A11yTableSpec } from '../../a11y';
 import { a11yRowBudget } from '../../a11y';
 import { seriesColor, type DataModel } from '../../model';
 import { makeCartesianDefinition } from '../cartesian';
-import { HIT_RADIUS } from '../../interaction/hittest';
+import { hitRadius } from '../../interaction/hittest';
 import { clamp, formatValue } from '../../util';
 
 export const DEFAULT_SIZE_RANGE: readonly [number, number] = [8, 40];
@@ -126,7 +126,7 @@ export const bubbleDefinition: ChartTypeDefinition = {
         if (!p) return;
         const rad = extra?.radii[si]?.[pi] ?? 4;
         const d = Math.hypot(p.x - px, p.y - py);
-        if (d > Math.max(HIT_RADIUS, rad + 2)) return;
+        if (d > Math.max(hitRadius(), rad + 2)) return;
         const score = d - rad; // nearest bubble EDGE wins for overlaps
         if (score < bestScore) {
           bestScore = score;
