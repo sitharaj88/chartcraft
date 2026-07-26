@@ -7,3 +7,9 @@ coverage/
 .vite/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+
+# Sample apps install from the npm registry and are NOT workspaces, so each
+# keeps its own node_modules and lockfile-driven build output.
+samples/*/node_modules/
+samples/*/dist/
+samples/*/.angular/

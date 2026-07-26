@@ -1,0 +1,22 @@
+{
+  "name": "@chartcraft/sample-vanilla",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Northwind Cloud — a realistic analytics dashboard built with @chartcraft/core (vanilla TypeScript + Vite)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@chartcraft/core": "^0.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <!-- Inline so the sample stays a single self-contained page (and so the
+         dev server does not log a 404 for a missing favicon). -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a78d6'/%3E%3Cpath d='M6 22l6-8 5 4.5L26 8' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"
+    />
+    <meta
+      name="description"
+      content="Northwind Cloud — revenue and product analytics, built with @chartcraft/core."
+    />
+    <title>Northwind Cloud — Revenue &amp; Product Analytics</title>
+  </head>
+  <body>
+    <!-- ============================================================ -->
+    <!-- Top bar                                                      -->
+    <!-- ============================================================ -->
+    <header class="topbar">
+      <div class="shell topbar__inner">
+        <div class="brand">
+          <span class="brand__mark" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path
+                d="M2 12.5 6 7l3.5 3.2L16 3"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <circle cx="16" cy="3" r="1.9" fill="currentColor" />
+            </svg>
+          </span>
+          <span>
+            <span class="brand__name">Northwind Cloud</span>
+            <span class="brand__sub">Analytics</span>
+          </span>
+        </div>
+
+        <div class="topbar__actions">
+          <div
+            class="segmented"
+            role="group"
+            aria-label="Date range"
+            id="range-control"
+          >
+            <!-- buttons injected by main.ts from RANGES -->
+          </div>
+
+          <button class="btn" id="export-csv" type="button">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M8 2v8m0 0L5 7m3 3 3-3M2.5 12.5v1h11v-1"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Export CSV
+          </button>
+
+          <button
+            class="btn btn--icon"
+            id="theme-toggle"
+            type="button"
+            aria-pressed="false"
+          >
+            <span class="visually-hidden">Dark theme</span>
+            <svg
+              id="icon-moon"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M13.5 9.6A5.8 5.8 0 0 1 6.4 2.5a5.8 5.8 0 1 0 7.1 7.1Z"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <svg
+              id="icon-sun"
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+              hidden
+            >
+              <circle cx="8" cy="8" r="3.2" stroke="currentColor" stroke-width="1.4" />
+              <path
+                d="M8 1v1.6M8 13.4V15M15 8h-1.6M2.6 8H1m11-5-1.1 1.1M5.1 10.9 4 12m8 0-1.1-1.1M5.1 5.1 4 4"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ============================================================ -->
+    <!-- Main                                                         -->
+    <!-- ============================================================ -->
+    <main class="shell" id="main">
+      <div class="page-head">
+        <div>
+          <h1 class="page-head__title">Revenue &amp; product analytics</h1>
+          <p class="page-head__meta" id="range-summary"></p>
+        </div>
+        <p class="page-head__stamp">Data as of 24 Jul 2026 · all figures USD</p>
+      </div>
+
+      <!-- KPI tiles (rendered by main.ts from getData().kpis) -->
+      <section class="kpis" id="kpis" aria-label="Key performance indicators"></section>
+
+      <!-- Chart grid -->
+      <section class="grid" aria-label="Analytics charts">
+        <!-- Row 1 -->
+        <article class="card card--hero card--span-8">
+          <div class="card__head">
+            <div>
+              <h2 class="card__title">Recurring revenue</h2>
+              <p class="card__subtitle" id="sub-mrr"></p>
+            </div>
+            <button class="btn btn--ghost" id="reset-zoom" type="button" hidden>
+              Reset zoom
+            </button>
+          </div>
+          <div class="card__chart" id="chart-mrr"></div>
+        </article>
+
+        <article class="card card--span-4">
+          <div class="card__head">
+            <div>
+              <h2 class="card__title">Platform capacity</h2>
+              <p class="card__subtitle" id="sub-capacity"></p>
+            </div>
+          </div>
+          <div class="card__chart" id="chart-capacity"></div>
+        </article>
+
+        <!-- Row 2 -->
+        <article class="card card--span-7">
+          <div class="card__head">
+            <div>
+              <h2 class="card__title">Acquisition flow</h2>
+              <p class="card__subtitle" id="sub-flow"></p>
+            </div>
+          </div>
+          <div class="card__chart" id="chart-flow"></div>
+        </article>
+
+        <article class="card card--span-5">
+          <div class="card__head">
+            <div>
+              <h2 class="card__title">Product mix</h2>
+              <p class="card__subtitle" id="sub-products"></p>
+            </div>
+          </div>
+          <div class="card__chart" id="chart-products"></div>
+        </article>
+
+        <!-- Row 3 -->
+        <article class="card card--span-8">
+          <div class="card__head">
+            <div>
+              <h2 class="card__title">Support load</h2>
+              <p class="card__subtitle" id="sub-tickets"></p>
+            </div>
+          </div>
+          <div class="card__chart" id="chart-tickets"></div>
+        </article>
+
+        <article class="card card--span-4">
+          <div class="card__head">
+            <div>
+              <h2 class="card__title">Revenue by segment</h2>
+              <p class="card__subtitle" id="sub-segments"></p>
+            </div>
+          </div>
+          <div class="card__chart" id="chart-segments"></div>
+        </article>
+
+        <!-- Row 4 -->
+        <article class="card card--span-4">
+          <div class="card__head">
+            <div>
+              <h2 class="card__title">Territory coverage</h2>
+              <p class="card__subtitle" id="sub-territories"></p>
+            </div>
+          </div>
+          <div class="card__chart" id="chart-territories"></div>
+        </article>
+
+        <article class="card card--span-5">
+          <div class="card__head">
+            <div>
+              <h2 class="card__title">Contract value</h2>
+              <p class="card__subtitle" id="sub-contracts"></p>
+            </div>
+          </div>
+          <div class="card__chart" id="chart-contracts"></div>
+        </article>
+
+        <article class="card card--span-3" aria-live="polite">
+          <div class="card__head">
+            <div>
+              <h2 class="card__title">Inspector</h2>
+              <p class="card__subtitle">Selected data point</p>
+            </div>
+          </div>
+          <div class="inspector" id="inspector"></div>
+        </article>
+      </section>
+    </main>
+
+    <footer class="footer shell">
+      <span>
+        Northwind Cloud is a fictional product. All figures are synthetic and
+        deterministic.
+      </span>
+      <span>
+        Built with <code>@chartcraft/core</code> <code id="cc-version"></code>
+      </span>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

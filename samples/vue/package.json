@@ -1,0 +1,26 @@
+{
+  "name": "@chartcraft/sample-vue",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Northwind Cloud — a realistic analytics dashboard built with @chartcraft/vue (Vue 3 + Vite)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@chartcraft/core": "^0.3.0",
+    "@chartcraft/vue": "^0.3.0",
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.1.4",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0",
+    "vue-tsc": "^2.1.10"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
