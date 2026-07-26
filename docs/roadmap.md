@@ -75,10 +75,12 @@ chart code — and v0.3 added a reason to want them:
 
 ## Frameworks
 
-- **Angular wrapper** (`@chartcraft/angular`) and **Solid wrapper**
-  (`@chartcraft/solid`) — same thin-wrapper contract as React/Vue/Svelte:
-  lifecycle, resize observation, event bridging, nothing else. Feature
-  parity comes from core, as always.
+- ~~**Angular wrapper** (`@chartcraft/angular`)~~ — **shipped in v0.3.**
+  Standalone, signal-based, zoneless-ready, all 39 chart types. See the
+  [Angular guide](frameworks/angular.md).
+- **Solid wrapper** (`@chartcraft/solid`) — same thin-wrapper contract as
+  React/Vue/Svelte/Angular: lifecycle, resize observation, event bridging,
+  nothing else. Feature parity comes from core, as always.
 
 ## Server-side & export
 

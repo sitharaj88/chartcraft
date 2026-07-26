@@ -77,13 +77,13 @@ useReveal();
     <HomeSection
       flip
       eyebrow="Frameworks"
-      title="One engine, three wrappers, exact parity"
+      title="One engine, four wrappers, exact parity"
       lede="Every feature lives in @chartcraft/core. The wrappers own lifecycle, resize observation and event bridging — and nothing else, so there is no feature that exists in one framework and not another, and nothing to port when the next one lands."
       :points="[
         'Options are deep-watched and routed through chart.update(), which diffs',
         'The live chart instance is reachable for zoomTo(), exportImage() and exportData()',
         'SSR-safe: the chart is created on mount, never at module scope',
-        'Angular and Solid are on the roadmap — the core will not change to get them',
+        'Solid is on the roadmap — the core will not change to get it',
       ]"
       link-text="See the roadmap"
       :link-href="withBase('/roadmap')"

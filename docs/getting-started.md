@@ -1,7 +1,7 @@
 # Getting started
 
 This guide takes you from install to a live, updating chart in vanilla
-TypeScript, React, Vue, and Svelte.
+TypeScript, React, Vue, Svelte, and Angular.
 
 ## Install
 
@@ -10,6 +10,7 @@ npm install @chartcraft/core            # always required
 npm install @chartcraft/react           # if you use React 18+
 npm install @chartcraft/vue             # if you use Vue 3
 npm install @chartcraft/svelte          # if you use Svelte 4 or 5
+npm install @chartcraft/angular         # if you use Angular 20+
 ```
 
 `@chartcraft/core` has zero runtime dependencies and ships ESM, CJS, and
@@ -148,6 +149,40 @@ Mutating `options` (it is deep-watched) triggers `chart.update`. See the
 
 Reassigning `options` triggers an update. See the
 [Svelte guide](frameworks/svelte.md).
+
+## Your first chart (Angular)
+
+Standalone components, signal inputs and outputs, no `NgModule` and no
+`zone.js` requirement. Import the component you need and bind `[options]`.
+
+```ts
+import { Component, signal } from '@angular/core';
+import { CcBarChart } from '@chartcraft/angular';
+import type { TypedChartOptions } from '@chartcraft/angular';
+
+@Component({
+  selector: 'app-revenue',
+  imports: [CcBarChart],
+  template: `<cc-bar-chart [options]="options()" style="height: 360px" />`,
+})
+export class RevenueComponent {
+  readonly options = signal<TypedChartOptions>({
+    title: 'Revenue by quarter',
+    data: {
+      categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+      series: [
+        { name: 'Product', data: [12.4, 13.1, 14.8, 16.2] },
+        { name: 'Services', data: [6.1, 6.4, 7.0, 7.9] },
+      ],
+    },
+  });
+}
+```
+
+Assigning a **new** options object triggers `chart.update` (the input is
+watched by reference, like React's props — see
+[immutable updates](frameworks/angular.md#immutable-updates)). See the
+[Angular guide](frameworks/angular.md).
 
 ## Updating data
 

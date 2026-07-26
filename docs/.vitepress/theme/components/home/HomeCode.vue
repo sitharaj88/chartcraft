@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Code-to-result: the same chart in four flavours, next to the live thing the
+ * Code-to-result: the same chart in five flavours, next to the live thing the
  * code produces. The chart on the right IS rendered by the Vue snippet on the
  * left — this page dogfoods `@chartcraft/vue` for every demo it shows.
  */
@@ -87,6 +87,31 @@ const options = {
 <\/script>
 
 <BarChart {options} />`,
+  },
+  {
+    id: 'angular',
+    label: 'Angular',
+    code: `import { Component } from '@angular/core';
+import { CcBarChart } from '@chartcraft/angular';
+
+@Component({
+  selector: 'app-revenue',
+  imports: [CcBarChart],
+  template: \`<cc-bar-chart [options]="options" />\`,
+})
+export class RevenueComponent {
+  readonly options = {
+    title: 'Revenue by quarter',
+    subtitle: 'FY2026, USD millions',
+    data: {
+      categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+      series: [
+        { name: 'Product', data: [12.4, 13.1, 14.8, 16.2] },
+        { name: 'Services', data: [6.1, 6.4, 7.0, 7.9] },
+      ],
+    },
+  };
+}`,
   },
 ] as const;
 

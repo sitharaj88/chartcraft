@@ -48,7 +48,7 @@ and default lives there. The order of operations for any API change is:
    the first commit of one). Get it reviewed as a contract change.
 2. **Implement in `@chartcraft/core`.** Core implements exactly the contract —
    names, types, defaults, and behavior.
-3. **Update the wrappers.** React, Vue, and Svelte stay at feature parity;
+3. **Update the wrappers.** React, Vue, Svelte, and Angular stay at feature parity;
    wrappers remain thin (lifecycle, resize, event bridging only — no chart
    logic outside core).
 4. **Update the docs and examples.** Guides, `docs/api/core.md`, and any

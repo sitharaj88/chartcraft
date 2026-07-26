@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
- * The wrapper row: three real charts, one per framework guide.
+ * The wrapper row: four real charts, one per framework guide.
  *
- * Every chart on this site — including these three — is rendered by
+ * Every chart on this site — including these four — is rendered by
  * `@chartcraft/vue`, because the wrappers are thin enough that the choice is
  * not supposed to matter. That is the claim this section is making, so the
- * cards say which package each link documents rather than implying three
+ * cards say which package each link documents rather than implying four
  * different engines are at work.
  */
 import { computed } from 'vue';
@@ -53,6 +53,15 @@ const wrappers: Wrapper[] = [
     value: '212 ms',
     spark: [251, 246, 258, 240, 236, 229, 233, 224, 219, 226, 215, 212],
   },
+  {
+    name: 'Angular',
+    pkg: '@chartcraft/angular',
+    peer: 'Angular 20+',
+    link: '/frameworks/angular',
+    metric: 'Builds per day',
+    value: '341',
+    spark: [268, 274, 281, 279, 292, 298, 305, 301, 314, 322, 333, 341],
+  },
 ];
 
 const optionsFor = computed(() => (w: Wrapper): ChartOptions => ({
@@ -96,7 +105,25 @@ const optionsFor = computed(() => (w: Wrapper): ChartOptions => ({
 
 @media (min-width: 560px) {
   .cc-fw {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/*
+ * Deliberately capped at TWO columns, not four.
+ *
+ * These cards live in one half of an alternating two-column section, so a
+ * `min-width: 900px` VIEWPORT query says nothing about the width the grid
+ * actually gets: at a 1280px viewport the column is ~620px, and four across
+ * left each card ~142px — narrower than the `@chartcraft/angular` chip, which
+ * then overflowed its card (a viewport media query cannot see the container it
+ * is laid out in; a container query could, but that needs a wrapper element to
+ * query against, since an element cannot query itself). Two columns give each
+ * card ~300px, which fits the longest package name with room to spare.
+ */
+@media (min-width: 900px) {
+  .cc-fw {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

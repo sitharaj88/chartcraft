@@ -291,9 +291,16 @@ Each wrapper exposes one idiomatic component wrapping `createChart`:
   deep-watches `options`; exposes `chart` via template ref. Same per-type aliases.
 - **Svelte** (`@chartcraft/svelte`): `<Chart {options} on:pointclick …>` (v4 syntax
   compatible with v5); reactive updates; same aliases.
+- **Angular** (`@chartcraft/angular`): `<cc-chart [options]="opts" (pointClick) (pointEnter) (pointLeave) (legendToggle) (zoom) (annotationClick) />`;
+  standalone and signal-based (`input.required<ChartOptions>()`, `output<T>()`),
+  no `NgModule` and no `zone.js` dependency. An `effect()` on the `options`
+  signal calls `chart.update` on every **reference** change (immutable update
+  contract, as in React); the instance is a public `chart` signal reached with
+  `viewChild`/`@ViewChild`. Same per-type components under the `cc-` selector
+  prefix (`<cc-line-chart>`, `<cc-sankey-chart>`, …, `Cc*Chart` class names).
 
 All wrappers: SSR-safe (no window access at import time; chart mounts in
-effect/onMounted), and they re-export all core types.
+effect/onMounted/`afterNextRender`), and they re-export all core types.
 
 ---
 

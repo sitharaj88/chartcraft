@@ -14,10 +14,10 @@ interface Stat {
 const stats: Stat[] = [
   { value: '39', label: 'chart types', detail: 'line through sankey, choropleth and network' },
   { value: '0', label: 'runtime dependencies', detail: 'ESM, CJS and .d.ts, strict TypeScript' },
-  { value: '2,045', label: 'tests, all green', detail: 'across core and the three wrappers' },
+  { value: '2,114', label: 'tests, all green', detail: 'across core and the four wrappers' },
   { value: '3.1 ms', label: 'redraw at 1M points', detail: 'measured; flat across 1k → 1M' },
   { value: 'WCAG 2.2', label: 'mapped, by default', detail: 'data table, keyboard nav, live region' },
-  { value: '3', label: 'framework wrappers', detail: 'React, Vue and Svelte — exact parity' },
+  { value: '4', label: 'framework wrappers', detail: 'React, Vue, Svelte and Angular — exact parity' },
 ];
 </script>
 

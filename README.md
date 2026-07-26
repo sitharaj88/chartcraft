@@ -1,7 +1,7 @@
 # ChartCraft
 
 **A framework-agnostic TypeScript charting library with a canvas core, thin
-React/Vue/Svelte wrappers, and accessibility built in — not bolted on.**
+React/Vue/Svelte/Angular wrappers, and accessibility built in — not bolted on.**
 
 ChartCraft is built for teams that ship charts to production: predictable
 performance from 10 points to 1M, a colorblind-validated default palette,
@@ -14,7 +14,7 @@ and one API contract shared by every framework wrapper.
   dependencies** and renders to Canvas 2D behind a swappable `Renderer`
   interface. Wrappers add lifecycle, resize observation, and event bridging —
   nothing else — so every framework has feature parity by construction.
-- **React, Vue, and Svelte wrappers.** One idiomatic `<Chart>` component per
+- **React, Vue, Svelte, and Angular wrappers.** One idiomatic chart component per
   framework, plus per-type conveniences (`<LineChart>`, `<BarChart>`, …). All
   SSR-safe.
 - **Accessibility first.** Canvas is opaque to screen readers, so every chart
@@ -49,6 +49,9 @@ npm install @chartcraft/core @chartcraft/vue
 
 # Svelte 4/5
 npm install @chartcraft/core @chartcraft/svelte
+
+# Angular 20+
+npm install @chartcraft/core @chartcraft/angular
 ```
 
 ## Quick start
@@ -108,7 +111,7 @@ export function Revenue() {
 | [Interactions](docs/concepts/interactions.md) | Tooltips, legend toggling, the events API |
 | [Accessibility](docs/accessibility.md) | The parallel DOM strategy, keyboard map, WCAG mapping |
 | [Performance](docs/performance.md) | Downsampling, update vs recreate, large-data tips |
-| [React](docs/frameworks/react.md) · [Vue](docs/frameworks/vue.md) · [Svelte](docs/frameworks/svelte.md) | Per-framework guides |
+| [React](docs/frameworks/react.md) · [Vue](docs/frameworks/vue.md) · [Svelte](docs/frameworks/svelte.md) · [Angular](docs/frameworks/angular.md) | Per-framework guides |
 | [API reference](docs/api/core.md) | Complete `@chartcraft/core` reference |
 | [Roadmap](docs/roadmap.md) | What's next after v0.1 |
 
@@ -121,7 +124,7 @@ npm workspaces; packages live under `packages/`.
 
 ```sh
 npm install        # install all workspace dependencies
-npm run build      # build core + wrappers (tsup, ESM + CJS + .d.ts)
+npm run build      # build core + wrappers (tsup; Angular via ng-packagr → APF)
 npm test           # vitest across all packages
 npm run docs:dev   # docs site (VitePress) with live chart demos
 npm run docs:build # static docs site → docs/.vitepress/dist

@@ -5,7 +5,7 @@ layout: home
 # 688px prose container.
 markdownStyles: false
 titleTemplate: 39 accessible chart types, zero dependencies
-description: ChartCraft is a zero-dependency, framework-agnostic charting core with 39 chart types and thin React, Vue and Svelte wrappers — accessible, colorblind-safe and fast by default.
+description: ChartCraft is a zero-dependency, framework-agnostic charting core with 39 chart types and thin React, Vue, Svelte and Angular wrappers — accessible, colorblind-safe and fast by default.
 ---
 
 <HomePage />

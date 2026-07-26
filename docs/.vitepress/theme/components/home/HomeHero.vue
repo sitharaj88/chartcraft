@@ -23,7 +23,7 @@ import { withBase } from 'vitepress';
         </p>
 
         <p class="cc-hero__tagline">
-          A framework-agnostic charting core with thin React, Vue and Svelte wrappers.
+          A framework-agnostic charting core with thin React, Vue, Svelte and Angular wrappers.
           Every chart ships a screen-reader data table, full keyboard navigation and a
           colorblind-safe palette — before you configure anything.
         </p>

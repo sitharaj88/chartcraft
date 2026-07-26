@@ -1973,3 +1973,106 @@ Two further consequences worth stating rather than discovering:
   drag**, because the zoom decorator suppresses hover while a gesture runs. It
   is cleared the moment the gesture applies a viewport; a drag too short to zoom
   is a tap, and keeping it is then the correct outcome.
+
+---
+
+# Angular wrapper (added 2026-07-26)
+
+Recorded with an `A-` prefix rather than continuing the numbered ledger: these
+are wrapper-packaging facts, not deviations in core's contract.
+
+## A-1. `@chartcraft/angular` is built with ng-packagr, not tsup
+
+Every other package in this repo is bundled with `tsup`. The Angular wrapper
+cannot be, and the reason is not preference: `@Component` decorators require
+the real Angular compiler (`ngtsc`, from `@angular/compiler-cli`) to emit Ivy
+component definitions. A plain TypeScript/esbuild transpile leaves the
+decorator *inert* — the class compiles, imports fine, and does nothing at
+runtime. That is fundamentally unlike the other three wrappers: React's JSX is
+native to esbuild, this repo's Vue wrapper is plain `h()` calls with no SFC
+compiler, and the Svelte wrapper ships uncompiled `.svelte` source for the
+consumer's own tooling. Shipping raw decorated `.ts` is not how the Angular
+ecosystem publishes libraries and breaks consumer AOT builds.
+
+So the package is built with **ng-packagr** (`21.2.x`) into the Angular Package
+Format: partial-Ivy `fesm2022` + `.d.ts`, `compilationMode: "partial"`, with
+the Angular linker finalizing the declarations inside the consumer's build.
+
+Three consequences worth stating rather than discovering:
+
+- **The publishable artifact is `packages/angular/dist`, not the package root.**
+  ng-packagr writes `dist/package.json` itself (adding `module`, `typings`,
+  `exports`, `type: module`) and *errors* if the source `package.json` already
+  declares those keys. The other three wrappers publish from their root with
+  `files: ["dist"]`; this one is published from `dist`. The consequence inside
+  the monorepo is that `import … from '@chartcraft/angular'` does not resolve
+  against the workspace symlink (the source `package.json` has no entry point)
+  — the package's own tests import from `../src/public-api` instead, which is
+  what the ng-packagr workflow expects.
+- **`@chartcraft/core` stays a real `dependency`**, matching the other three
+  wrappers. ng-packagr wants library dependencies to be peers and fails
+  otherwise, so `ng-package.json` carries an explicit
+  `allowedNonPeerDependencies: ["@chartcraft/core"]`.
+- **The shared `tsconfig.base.json` needed no changes.** `moduleResolution:
+  "bundler"`, `verbatimModuleSyntax: true` and `isolatedModules: true` all
+  passed through `ngtsc` unmodified; the package adds only a `tsconfig.lib.json`
+  (emit + `angularCompilerOptions`) and a `tsconfig.spec.json`.
+
+## A-2. `cc-` selector prefix and `Cc*` class names
+
+Angular element selectors are global to a template's import graph, so a
+library must namespace them; `<chart>` or `<line-chart>` would collide with
+half the ecosystem. The components are `<cc-chart>` and `<cc-<type>-chart>`
+(39 of those), with class names `CcChart` / `Cc<Type>Chart`. This is the one
+place the Angular wrapper's public names differ from React/Vue/Svelte, which
+export bare `Chart` / `LineChart`. Core's `Chart` *instance interface* is
+re-exported as `ChartInstance`, exactly as in the other wrappers.
+
+## A-3. Options updates are immutable-by-reference, like React — not deep-watched like Vue
+
+The `options` input is watched with an `effect()`, which reacts to reference
+changes. Mutating the same object in place does **not** reach `chart.update()`;
+callers must pass a new object. This matches the React wrapper's contract and
+is documented on the Angular guide page and in the component JSDoc.
+
+The upside over React's implementation is worth recording: React's update
+effect depends on a hand-written exhaustive `OPTION_KEYS` list (a prior version
+shipped a real bug where new option keys were missing from it, so changing them
+did nothing). The Angular effect reads the whole `options()` signal, so there
+is no key list to keep in sync — any reference change is picked up, including
+option blocks added by future core versions.
+
+Two guards make the behaviour deterministic: the effect reads the chart
+instance `untracked`, so creating the chart never re-triggers it, and the exact
+options reference the chart was *built* with is remembered, so mounting never
+issues a redundant `chart.update()`.
+
+## A-4. zone.js is neither a dependency nor a peer dependency
+
+`@angular/core` lists `zone.js` as an *optional* peer. The wrapper's reactivity
+is signals end to end (`input()`, `output()`, `effect()`, `afterNextRender()`),
+so it never touches `NgZone` and works identically in zone-based and
+`provideZonelessChangeDetection()` applications. The package's own test suite
+runs zoneless with no zone.js loaded anywhere, which is the proof.
+
+`peerDependencies` are floored at `@angular/core >= 20.0.0` (no upper bound,
+matching the other wrappers' style): v20 is the earliest major where every API
+used here — signal `input()`/`output()`, `afterNextRender()`, zoneless change
+detection — is stable. The dev/build toolchain targets Angular 21, which is the
+major whose TypeScript peer range (`>=5.9 <6.0`) matches the repo's already
+resolved TypeScript 5.9.3 with no second copy.
+
+## A-5. Angular components are tested AOT, with a second Vitest major
+
+Angular's JIT compiler builds directive metadata from the decorator object; it
+does not scan class fields, so **signal `input()`/`output()` declarations are
+invisible to JIT**. Testing this package therefore requires real AOT
+compilation, provided by `@analogjs/vite-plugin-angular` running `ngtsc` inside
+Vite (with `@angular/build` as its compilation backend). Tests drive Angular's
+own `TestBed` with `provideZonelessChangeDetection()`.
+
+That toolchain requires Vite 6+, and `@angular/build@21` peers on `vitest@^4`,
+so `packages/angular` carries its own **Vitest 4** (nested under
+`packages/angular/node_modules`) while core/react/vue/svelte stay on the root's
+Vitest 2. `npm run test -w @chartcraft/angular` and `npm test` from the root
+both work unchanged; the two majors never share a process.
