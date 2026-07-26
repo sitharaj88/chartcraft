@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["vite/client"],
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true
+  },
+
+  // The Angular half of the type check: `strictTemplates` type-checks every
+  // binding in every template, and `typeCheckHostBindings` extends that to the
+  // `host: { … }` blocks this sample leans on for its attribute-selector
+  // components. `npm run build` runs `tsc --noEmit` for the TypeScript and then
+  // `vite build`, where @analogjs/vite-plugin-angular runs ngtsc and surfaces
+  // the template diagnostics.
+  //
+  // NOTE: `noEmit` is deliberately NOT set here. ngtsc emits through this same
+  // config when Vite transforms each file, so a `noEmit: true` would leave the
+  // plugin with nothing to hand back; the `--noEmit` flag on the CLI covers the
+  // typecheck pass instead.
+  "angularCompilerOptions": {
+    "strictTemplates": true,
+    "strictInjectionParameters": true,
+    "typeCheckHostBindings": true
+  },
+
+  "include": ["src"]
+}

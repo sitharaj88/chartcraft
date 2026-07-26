@@ -1,0 +1,32 @@
+{
+  "name": "@chartcraft/sample-angular",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Northwind Cloud — a realistic analytics dashboard built with @chartcraft/angular (standalone components, signals, zoneless, Vite)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@angular/common": "^21.2.0",
+    "@angular/core": "^21.2.0",
+    "@angular/platform-browser": "^21.2.0",
+    "@chartcraft/angular": "^0.3.0",
+    "@chartcraft/core": "^0.3.0",
+    "rxjs": "^7.8.1",
+    "tslib": "^2.8.1"
+  },
+  "devDependencies": {
+    "@analogjs/vite-plugin-angular": "^2.6.4",
+    "@angular/build": "^21.2.0",
+    "@angular/compiler": "^21.2.0",
+    "@angular/compiler-cli": "^21.2.0",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.0"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

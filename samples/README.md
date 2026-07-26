@@ -1,6 +1,6 @@
 # ChartCraft samples
 
-**The same dashboard, built four times.**
+**The same dashboard, built five times.**
 
 Each folder is a standalone application that installs `@chartcraft/*` **from the
 npm registry** — not via workspace links, not via relative paths into
@@ -13,14 +13,12 @@ packages work for a real consumer, not just inside this monorepo.
 | [`react/`](react) | `@chartcraft/core` · `@chartcraft/react` | Vite + React 18 |
 | [`vue/`](vue) | `@chartcraft/core` · `@chartcraft/vue` | Vite + Vue 3 |
 | [`svelte/`](svelte) | `@chartcraft/core` · `@chartcraft/svelte` | Vite + Svelte 5 |
-
-> An Angular sample is not here yet — it lands once `@chartcraft/angular`
-> is published to npm.
+| [`angular/`](angular) | `@chartcraft/core` · `@chartcraft/angular` | Vite + Angular 21 (standalone · signals · zoneless) |
 
 ## Run one
 
 ```sh
-cd samples/react     # or vanilla · vue · svelte
+cd samples/react     # or vanilla · vue · svelte · angular
 npm install
 npm run dev          # or: npm run build && npm run preview
 ```
@@ -56,15 +54,18 @@ reports whether the interaction came from a pointer or the keyboard.
 
 ## Why they look identical
 
-`src/data.ts` and `src/styles.css` are **byte-identical across all four
+`src/data.ts` and `src/styles.css` are **byte-identical across all five
 samples** (verified by hash). Only the app code differs, and it is written
 idiomatically for each framework — hooks and `useMemo` in React, `<script
-setup>` and `computed` in Vue, runes and snippets in Svelte, direct
-`createChart` calls in vanilla.
+setup>` and `computed` in Vue, runes and snippets in Svelte, standalone
+components with `signal`/`computed` under `provideZonelessChangeDetection()` in
+Angular, direct `createChart` calls in vanilla.
 
-That is the point. Rendered side by side, the four builds differ by **~0.02%
-of pixels**, entirely in the footer line naming the package. Feature parity
-across frameworks isn't a claim in these samples — it's a measurement.
+That is the point. Rendered side by side, the five builds differ by **~0.02%
+of pixels** (Angular vs vanilla at 1440px light: 428 / 2,954,880 =
+**0.0145%**), entirely in the footer line naming the package, with document
+heights equal to the pixel. Feature parity across frameworks isn't a claim in
+these samples — it's a measurement.
 
 ## Accessibility
 
