@@ -3,6 +3,17 @@
   "version": "0.3.0",
   "description": "ChartCraft Svelte wrapper — thin lifecycle/event bridge around @chartcraft/core (ships source .svelte components)",
   "license": "MIT",
+  "author": { "name": "Sitharaj", "url": "https://sitharaj.in" },
+  "homepage": "https://sitharaj88.github.io/chartcraft/frameworks/svelte",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sitharaj88/chartcraft.git",
+    "directory": "packages/svelte"
+  },
+  "bugs": "https://github.com/sitharaj88/chartcraft/issues",
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "sideEffects": false,
   "svelte": "./src/index.js",

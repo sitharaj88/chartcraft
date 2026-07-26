@@ -3,6 +3,17 @@
   "version": "0.3.0",
   "description": "ChartCraft React wrapper — thin lifecycle/event bridge around @chartcraft/core",
   "license": "MIT",
+  "author": { "name": "Sitharaj", "url": "https://sitharaj.in" },
+  "homepage": "https://sitharaj88.github.io/chartcraft/frameworks/react",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sitharaj88/chartcraft.git",
+    "directory": "packages/react"
+  },
+  "bugs": "https://github.com/sitharaj88/chartcraft/issues",
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

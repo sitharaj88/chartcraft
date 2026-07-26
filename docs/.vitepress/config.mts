@@ -182,10 +182,42 @@ export default defineConfig({
 
     outline: { level: [2, 3] },
 
-    socialLinks: [{ icon: 'github', link: 'https://github.com/sitharaj88/chartcraft' }],
+    socialLinks: [
+      { icon: 'github', link: 'https://github.com/sitharaj88/chartcraft' },
+      { icon: 'linkedin', link: 'https://www.linkedin.com/in/sitharaj08' },
+      {
+        // VitePress has no built-in "personal site" icon — a minimal globe,
+        // matching the stroke weight of the built-in icon set. VPSocialLink's
+        // own stylesheet sets `svg { fill: currentColor }` on the root <svg>
+        // (so built-in filled icons pick up the theme color), which beats a
+        // `fill="none"` attribute on that same root and then INHERITS down to
+        // children with no fill of their own — silently turning a stroke-only
+        // icon into a solid disc. Fix: repeat `fill="none"` on every child
+        // shape too, so each has its own specified value rather than an
+        // inherited one, regardless of what the ancestor's fill resolves to.
+        icon: {
+          svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9" fill="none"/><path fill="none" d="M3 12h18M12 3c2.5 2.5 4 5.7 4 9s-1.5 6.5-4 9c-2.5-2.5-4-5.7-4-9s1.5-6.5 4-9Z"/></svg>',
+        },
+        link: 'https://sitharaj.in',
+        ariaLabel: 'Sitharaj — personal website',
+      },
+      {
+        // No built-in "Buy Me a Coffee" icon either — a simple cup glyph.
+        // Same per-child fill="none" fix as the globe icon above.
+        icon: {
+          svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path fill="none" d="M4 9h13v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V9Z"/><path fill="none" d="M17 10h1.5a2.5 2.5 0 0 1 0 5H17"/><path fill="none" d="M8 3c-.6.7-.6 1.3 0 2M12 3c-.6.7-.6 1.3 0 2"/></svg>',
+        },
+        link: 'https://www.buymeacoffee.com/sitharaj88',
+        ariaLabel: 'Buy Sitharaj a coffee',
+      },
+    ],
 
     footer: {
-      message: 'Released under the MIT License.',
+      message:
+        'Released under the MIT License. Built by <a href="https://sitharaj.in" target="_blank" rel="noopener">Sitharaj</a> — ' +
+        '<a href="https://github.com/sitharaj88" target="_blank" rel="noopener">GitHub</a> · ' +
+        '<a href="https://www.linkedin.com/in/sitharaj08" target="_blank" rel="noopener">LinkedIn</a> · ' +
+        '<a href="https://www.buymeacoffee.com/sitharaj88" target="_blank" rel="noopener">Buy me a coffee</a>',
       copyright: 'Copyright © ChartCraft contributors',
     },
   },

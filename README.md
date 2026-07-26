@@ -148,6 +148,14 @@ The public API surface is defined by [`docs/api-contract.md`](docs/api-contract.
 — core implements it, wrappers consume it, docs document it. See
 [CONTRIBUTING.md](CONTRIBUTING.md) for the contract-first workflow.
 
+## Author
+
+Built by **Sitharaj** —
+[website](https://sitharaj.in) ·
+[GitHub](https://github.com/sitharaj88) ·
+[LinkedIn](https://www.linkedin.com/in/sitharaj08) ·
+[buy me a coffee](https://www.buymeacoffee.com/sitharaj88)
+
 ## License
 
 MIT © ChartCraft contributors. See [LICENSE](LICENSE).

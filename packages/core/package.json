@@ -3,6 +3,17 @@
   "version": "0.3.0",
   "description": "ChartCraft core \u2014 framework-agnostic charting engine (zero dependencies)",
   "license": "MIT",
+  "author": { "name": "Sitharaj", "url": "https://sitharaj.in" },
+  "homepage": "https://sitharaj88.github.io/chartcraft/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sitharaj88/chartcraft.git",
+    "directory": "packages/core"
+  },
+  "bugs": "https://github.com/sitharaj88/chartcraft/issues",
+  "publishConfig": {
+    "access": "public"
+  },
   "sideEffects": false,
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",

@@ -3,6 +3,11 @@
   "private": true,
   "version": "0.1.0",
   "description": "ChartCraft — a world-class, framework-agnostic charting library for the web",
+  "author": { "name": "Sitharaj", "url": "https://sitharaj.in" },
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/sitharaj88/chartcraft.git" },
+  "homepage": "https://sitharaj88.github.io/chartcraft/",
+  "bugs": "https://github.com/sitharaj88/chartcraft/issues",
   "workspaces": [
     "packages/*"
   ],
