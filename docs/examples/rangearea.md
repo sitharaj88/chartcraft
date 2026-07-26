@@ -73,11 +73,11 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 <script setup lang="ts">
 import { categoricalPalette } from '@chartcraft/core';
 import { RangeareaChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
 const brand = categoricalPalette.light[0];
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Monthly recurring revenue — actuals and forecast',
   subtitle: 'Shaded band = 80% prediction interval',
   data: {

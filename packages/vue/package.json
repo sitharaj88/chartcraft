@@ -1,6 +1,6 @@
 {
   "name": "@chartcraft/vue",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "ChartCraft Vue 3 wrapper — thin lifecycle/event bridge around @chartcraft/core",
   "license": "MIT",
   "author": { "name": "Sitharaj", "url": "https://sitharaj.in" },
@@ -35,7 +35,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@chartcraft/core": "0.3.0"
+    "@chartcraft/core": "0.4.0"
   },
   "peerDependencies": {
     "vue": ">=3.3"

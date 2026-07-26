@@ -20,7 +20,6 @@ outlier dots) or a precomputed 5-number object
 
 ```ts [Vanilla]
 import { createChart } from '@chartcraft/core';
-import type { DataValue } from '@chartcraft/core';
 
 // One raw-sample array per category (the chart summarizes them itself).
 const samples = [
@@ -40,9 +39,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
       {
         id: 'latency',
         name: 'Response time',
-        // Raw number[] entries need a cast — the DataValue union only
-        // names the tuple shapes; the runtime accepts raw samples as-is.
-        data: samples as unknown as DataValue[],
+        // No cast needed: the DataValue union names the per-category
+        // sample list, so a number[][] assigns directly.
+        data: samples,
       },
     ],
   },
@@ -57,7 +56,7 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { BoxplotChart } from '@chartcraft/vue';
-import type { DataValue, TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
 // One raw-sample array per category (the chart summarizes them itself).
 const samples = [
@@ -67,7 +66,7 @@ const samples = [
   [201, 213, 224, 236, 247, 259, 270, 284, 301, 322, 348], // SA-East
 ];
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'API response time by region',
   subtitle: 'p50 request latency samples, last 24 h (ms)',
   data: {
@@ -76,9 +75,9 @@ const options: TypedChartOptions = {
       {
         id: 'latency',
         name: 'Response time',
-        // Raw number[] entries need a cast — the DataValue union only
-        // names the tuple shapes; the runtime accepts raw samples as-is.
-        data: samples as unknown as DataValue[],
+        // No cast needed: the DataValue union names the per-category
+        // sample list, so a number[][] assigns directly.
+        data: samples,
       },
     ],
   },

@@ -75,19 +75,58 @@ behind a pan. Everything else reaches the canvas exactly as before. See
 [Interactions](../concepts/interactions.md#zoom-pan-and-brush) and
 [Accessibility](../accessibility.md#keyboard-navigation).
 
+## The viewport across an update {#the-viewport-across-an-update}
+
+The viewport is **instance state, not an option** — it does not appear in
+`getOptions()`, because an options snapshot round-trips configuration, not scroll
+position. So `update()` has to decide whether the window a user brushed is still
+meaningful against the new options.
+
+Since **0.4** the discriminator is the **computed domains**, not which keys the
+payload happened to carry:
+
+| Condition | Effect on the window |
+|---|---|
+| chart `type` changed | **reset** — the numbers are read differently |
+| x axis *kind* changed (`xType`: linear / time / band) | **reset** — a window in the old reading is meaningless |
+| an `x` window and `xDomain` changed | **reset** |
+| a `y` window and `yDomain` changed | **reset** |
+| anything else — theme, title, legend, an identical re-send, new **values** on the same timestamps | **preserved**, exactly |
+
+The check is **per axis**, which is what makes a live feed work: appending new
+readings at the same timestamps moves `yDomain` but not `xDomain`, and the
+default `zoom.axis` is `'x'`, so the common case never consults the value extent
+at all.
+
+**A reset always emits `zoom: null`.** An app's "Reset zoom" affordance is driven
+by the `zoom` event, so a silent reset would leave that button visible pointing at
+nothing.
+
+The check is also free: it compares four numbers `buildModel` had already
+computed for the layout — no second pass over the data and no fingerprint to
+hash — so it costs the same at 1,000,000 points as at 10.
+
+::: warning What used to happen
+The old rule was `'data' in partial || 'type' in partial`. Every framework
+wrapper re-sends the **whole** options object on any change, because that is what
+their reactivity models hand them — so through a wrapper *every* update carried
+`data`, and a pure theme toggle silently destroyed the user's brush **and emitted
+no event**.
+:::
+
 ## Caveats
 
 - **Continuous axes only.** Band (category) axes ignore the viewport entirely:
   windowing a band scale would desynchronize band indices from `categories`, which
   tick labels, hit-testing and the a11y table all address by index. A gesture on a
   band axis simply produces no window.
-- **The viewport is instance state, not an option.** It does **not** appear in
-  `getOptions()` — an options snapshot round-trips configuration, not scroll
-  position. Supplying new `data` or a new `type` **resets** it, because the window
-  is expressed in the previous data's units.
+- **The viewport is instance state, not an option**, and an `update()` keeps it
+  unless the **computed domains** move — see
+  [The viewport across an update](#the-viewport-across-an-update).
 - **Events fire once per gesture.** A pan writes the viewport silently while you
   drag and emits a single `zoom` on release; brush release, wheel, keyboard zoom
   and every reset emit immediately — and only when the window actually changed.
+  An `update()` that discards the window also emits (`null`).
 - **Zooming all the way out is a reset:** any axis spanning its full data bounds is
   dropped from the viewport, and an empty viewport normalizes to `null`, so you get
   `zoom: null` rather than a viewport equal to the extent.
@@ -105,11 +144,12 @@ behind a pan. Everything else reaches the canvas exactly as before. See
   (padded one point each side so lines exit the plot edges) and then LTTB'd only if
   the window still exceeds the threshold. Series below the threshold are never
   windowed. See [Performance](../performance.md#zoom-and-downsampling).
-- **The data table follows the window.** Because windowing happens in the data
-  model, the accessibility table, keyboard navigation and `exportData()` all
-  describe the visible points — zoom a 60,000-point series to one hour and the
-  table has ~120 rows. Keyboard users get the same fidelity as sighted ones, but
-  an export taken while zoomed is not the whole series.
+- **Keyboard navigation follows the window; the data table and `exportData()` do
+  not.** Arrow-key navigation walks the drawn marks, so a keyboard user gets the
+  same fidelity a sighted user has just zoomed into. The accessibility table and
+  `exportData()` deliberately read the **full** series instead — an export that
+  silently truncates to the current scroll position is a data-integrity problem —
+  and the accessible description states the relationship whenever the two differ.
 - Zoom is implemented as a [decorator](../extensibility.md), and it is the reason
   the `attach(host)` hook exists — all of its DOM listeners live there, so
   `chart.ts` contains no zoom interaction code at all.

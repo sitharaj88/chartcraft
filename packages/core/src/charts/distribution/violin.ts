@@ -30,7 +30,7 @@ import type { NavContext } from '../../a11y/keyboard';
 import type { PathCmd } from '../../render/renderer';
 import { seriesColor } from '../../model';
 import { BandScale } from '../../scales/band';
-import { LinearScale } from '../../scales/linear';
+import { niceValueDomain } from '../../scales';
 import { formatValue } from '../../util';
 import { hitRadius } from '../../interaction/hittest';
 import { quantileR7, summarizeBox, type FiveNumberSummary } from '../statistical/stats';
@@ -232,11 +232,10 @@ export const violinDefinition: ChartTypeDefinition = {
    * and samples are read from the RAW data — invisible to the generic value
    * extent. Pipeline stage, so `getOptions().yAxis` stays the caller's.
    */
-  extendValueDomain(_model, opts) {
+  extendValueDomain(model, opts) {
     const [lo, hi] = violinExtent(opts.data);
     if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
-    const nice = new LinearScale([lo, hi]).nice(5).domain();
-    return [nice[0], nice[1]];
+    return niceValueDomain(lo, hi, model.valueAxisLog);
   },
 
   layout(ctx): TypeGeom {

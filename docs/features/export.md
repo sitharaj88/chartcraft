@@ -85,11 +85,14 @@ indent, no trailing newline.
   context rather than data.
 - **Hidden series** follow the table: toggling a series off in the legend changes
   what the table (and therefore the export) contains.
-- **`exportData()` is not a raw-data dump.** Because it mirrors the table, it
-  describes the points the chart actually retained: a series above
-  `downsample.threshold` exports its **downsampled** points (~5,000 rows for
-  60,000 samples), and a zoomed chart exports only the visible window. Export from
-  your own data source when you need every raw sample, or disable downsampling.
+- **`exportData()` returns every row — downsampling and zoom do not narrow it.**
+  It mirrors the table, and the table deliberately reads the **full** series
+  rather than the lossy render view: an export that silently truncated to 5,000 of
+  60,000 rows (or to whatever the user had zoomed into) would be a data-integrity
+  problem, not a performance trade-off. It is also never capped by
+  `a11y.tableMaxRows` — that bound applies only to the rows *materialized into the
+  DOM*, and the truncation is stated in the table's `<caption>`. See
+  [Accessibility](../accessibility.md#the-data-table).
 - `a11y: { table: 'off' }` removes the DOM table but `exportData()` still works —
   the spec is built either way.
 - Both methods need a mounted chart; call them after mount (in a framework wrapper,

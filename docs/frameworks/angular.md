@@ -13,11 +13,62 @@ zone-based and `provideZonelessChangeDetection()` applications.
 ## Install
 
 ```sh
-npm install @chartcraft/core @chartcraft/angular
+npm install @chartcraft/angular
 ```
 
-Requires Angular **20 or newer**. The wrapper re-exports all core types —
-import everything from `@chartcraft/angular`.
+Requires Angular **20 or newer**.
+
+**One package, not two.** `@chartcraft/angular` depends on core and re-exports its
+whole public surface — every type *and* every value — so `@chartcraft/core` does
+not need to be a second direct dependency:
+
+```ts
+import {
+  CcLineChart,
+  // themes & palette
+  lightTheme, darkTheme, categoricalPalette, sequentialPalette, sequentialRampFor,
+  // utilities
+  LinearScale, TimeScale, BandScale, LogScale, downsampleLTTB,
+  // custom decorators
+  registerDecorator, unregisterDecorator, decorators, clearDecorators,
+  // escape hatch + version
+  createChart, version,
+} from '@chartcraft/angular';
+```
+
+These are named re-exports, never `export *`, so they tree-shake: importing
+`lightTheme` from the wrapper is byte-identical to importing it from core and
+pulls in neither the chart engine nor any component.
+
+Core's `Chart` *interface* would collide with the `Cc…Chart` component classes,
+so the instance type is re-exported as **`ChartInstance`**. Every other core type
+keeps its own name.
+
+## `ChartSpec`: options in their own module
+
+`ChartSpec` is `Omit<ChartOptions, 'type'>` — the type for keeping chart
+configuration in a plain `specs.ts` and binding it to the matching per-type
+component. All four ChartCraft wrappers export it under this same name, so a
+spec module is portable between them.
+
+```ts
+// specs.ts
+import type { ChartSpec } from '@chartcraft/angular';
+
+export const revenue: ChartSpec = {
+  title: 'Revenue',
+  data: {
+    categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+    series: [{ name: 'Product', data: [12.4, 13.1, 14.8, 16.2] }],
+  },
+};
+```
+```html
+<cc-bar-chart [options]="revenue" />
+```
+
+`ChartSpec` replaces `TypedChartOptions`, which is kept as a **deprecated
+alias** so 0.3.0 code keeps compiling; it will be removed in 1.0.
 
 ## The `<cc-chart>` component
 
@@ -71,6 +122,7 @@ export class RevenueComponent {
 | `(legendToggle)` | payload `{ seriesId: string; visible: boolean }` |
 | `(zoom)` | **v0.3.** payload `{ x?: [number, number]; y?: [number, number] } \| null` (`null` = reset) |
 | `(annotationClick)` | **v0.3.** payload `{ index: number; annotation: Annotation }` |
+| `(ready)` | **v0.4.** payload `ChartInstance`. Emits exactly **once**, from `afterNextRender`, with the live instance. |
 
 Lifecycle mapping: `afterNextRender` → `createChart`; the `options` `effect()`
 fires → `chart.update`; `DestroyRef.onDestroy` → `chart.destroy`.
@@ -98,6 +150,26 @@ deep watch. The upside over React's is that the effect reads the *whole*
 fall out of sync with `ChartOptions` — any reference change is picked up,
 including option blocks added by future core versions.
 
+The inverse trap is an object literal written inline in the template —
+`[options]="{ title: 'WAU', data: data() }"` — which is rebuilt on every
+change-detection pass and therefore pushes a redundant `chart.update()` each
+time (and with `zoom: { enabled: true }`, an update whose data lands on a
+different domain discards the user's viewport). Hold options in a `signal` or
+`computed()` and bind that.
+
+Since **0.4** the wrapper tells you when you get this wrong: if `[options]`
+arrives as a new-but-deeply-equal object three passes in a row, it logs one
+`console.warn` naming the component. The check is guarded by
+[`isDevMode()`](https://angular.dev/api/core/isDevMode), which is `false` in
+every production build, so it never runs in a shipped app.
+
+::: tip Since 0.4, an update only resets the zoom when it has to
+The viewport now survives any update whose **computed domains** are unchanged —
+so a theme change, an equivalent re-send, or new values on the same timestamps
+all keep the window. See
+[Zoom, pan & brush](../features/zoom-pan-brush.md#the-viewport-across-an-update).
+:::
+
 For very large `data`, replacing the whole options object is still cheap: it is
 one shallow spread, and core diffs the result. If you want to bypass the
 wrapper entirely, take the instance (below) and call `setData` directly.
@@ -105,7 +177,7 @@ wrapper entirely, take the instance (below) and call `setData` directly.
 ## Per-type components
 
 One per chart type — **39 of them**, same interface, minus `type` inside
-`options` (their options type is `TypedChartOptions`). Class names are
+`options` (their options type is `ChartSpec`). Class names are
 `Cc` + type + `Chart`; selectors are `cc-<type>-chart`:
 
 - **v0.1** `CcLineChart`, `CcAreaChart`, `CcBarChart`, `CcScatterChart`,
@@ -122,54 +194,85 @@ One per chart type — **39 of them**, same interface, minus `type` inside
   `CcNetworkChart`
 
 ```ts
+import { Component, signal } from '@angular/core';
+import { CcBarChart } from '@chartcraft/angular';
+import type { ChartSpec } from '@chartcraft/angular';
+
 @Component({
   selector: 'app-revenue',
   imports: [CcBarChart],
-  template: `<cc-bar-chart [options]="options" style="height: 320px" />`,
+  template: `<cc-bar-chart [options]="options()" style="height: 320px" />`,
 })
 export class RevenueComponent {
-  readonly options = { data: revenue, stacked: true, title: 'Revenue' };
+  readonly options = signal<ChartSpec>({ data: revenue, stacked: true, title: 'Revenue' });
 }
 ```
 
-They emit exactly the same six outputs and expose the same `chart` signal.
+They emit exactly the same outputs (including `(ready)`) and expose the same
+`chart` signal and `whenReady()` method.
 
-## Getting the `Chart` instance
+::: tip Known limitation: the per-type components share one options type
+`[options]` is the same loose `ChartSpec` for all 39 of them, so
+`<cc-gauge-chart [options]="{ sankey: { nodeWidth: 12 } }">` type-checks even
+under `strictTemplates`. The components buy you the correct `type` string, not a
+narrowed options shape. Narrowing was assessed and deliberately deferred: it
+would break the shared-`ChartSpec` pattern above, and it is a 1.0-shaped change.
+:::
 
-Every component exposes the underlying instance as a public `chart` **signal**
-(`Signal<ChartInstance | null>` — `null` before the first render and after
-destroy). Angular's `viewChild`/`@ViewChild` on the component class gives you
-the component instance directly, so there is no separate "expose" mechanism:
+## Getting the `Chart` instance: `(ready)` and `whenReady()`
+
+`viewChild()` is `undefined` before the view exists and the `chart` signal is
+`null` before the first render, so `this.hero()?.chart()?.…` used to mean two
+levels of nullability at every imperative call site. Since **0.4** two
+affordances remove it.
+
+In a template, bind the `(ready)` output — it emits exactly once, from
+`afterNextRender`, with the live instance:
+
+```html
+<cc-line-chart [options]="options()" (ready)="onChartReady($event)" />
+```
+
+In setup code, await `whenReady()` — already resolved if the chart is up:
 
 ```ts
-import { Component, effect, signal, viewChild } from '@angular/core';
-import { CcChart } from '@chartcraft/angular';
-import type { ChartOptions } from '@chartcraft/angular';
+import { Component, afterNextRender, signal, viewChild } from '@angular/core';
+import { CcLineChart } from '@chartcraft/angular';
+import type { ChartSpec } from '@chartcraft/angular';
 
 @Component({
   selector: 'app-revenue',
-  imports: [CcChart],
-  template: `<cc-chart [options]="options()" style="height: 300px" />`,
+  imports: [CcLineChart],
+  template: `<cc-line-chart [options]="options()" style="height: 300px" />`,
 })
 export class RevenueComponent {
-  readonly options = signal<ChartOptions>({ /* … */ } as ChartOptions);
-  private readonly chartCmp = viewChild.required(CcChart);
+  readonly options = signal<ChartSpec>({ /* … */ } as ChartSpec);
+  private readonly hero = viewChild.required(CcLineChart);
 
   constructor() {
-    effect((onCleanup) => {
-      const chart = this.chartCmp().chart();
-      if (!chart) return;                    // not rendered yet
-      const off = chart.on('render', ({ reason }) => console.log('rendered:', reason));
-      onCleanup(off);
+    afterNextRender(async () => {
+      const chart = await this.hero().whenReady();
+      chart.zoomTo({ x: [0, 10] });
     });
   }
 }
 ```
 
-Because `chart` is a signal, an `effect()` is the natural way to wait for it —
-no `AfterViewInit` timing puzzle. The instance gives you the full imperative
-surface: `on`/`off` beyond the bridged events, `setData`, `resize`,
-`getOptions`, `exportImage`, `exportData`, `zoomTo`.
+The `chart` signal (`Signal<ChartInstance | null>` — `null` before the first
+render and after destroy) is still there for event handlers and template reads,
+where the instance already exists, and an `effect()` over it still works:
+
+```ts
+effect((onCleanup) => {
+  const chart = this.hero().chart();
+  if (!chart) return;                    // not rendered yet
+  onCleanup(chart.on('render', ({ reason }) => console.log('rendered:', reason)));
+});
+```
+
+Either way the instance gives you the full imperative surface: `on`/`off`
+beyond the bridged events, `setData`, `resize`, `getOptions`, `exportImage`,
+`exportData`, `zoomTo`.
 
 ## SSR (Angular Universal / `@angular/ssr`)
 

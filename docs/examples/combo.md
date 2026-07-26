@@ -48,9 +48,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { BarChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Revenue vs. target',
   subtitle: 'FY2026 by month ($k)',
   data: {

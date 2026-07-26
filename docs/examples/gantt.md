@@ -60,9 +60,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { GanttChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Release 4.0 plan',
   subtitle: 'Swimlanes by team · dashed line = today',
   gantt: { today: new Date('2026-08-24') },

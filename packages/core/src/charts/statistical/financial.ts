@@ -21,7 +21,7 @@ import type { LegendItem } from '../../components/legend';
 import type { NavContext } from '../../a11y/keyboard';
 import { bandIndexFor, seriesColor } from '../../model';
 import { BandScale } from '../../scales/band';
-import { LinearScale } from '../../scales/linear';
+import { niceValueDomain } from '../../scales';
 import { clamp, formatTemporal, formatValue } from '../../util';
 import { hitRadius, nearestByX } from '../../interaction/hittest';
 
@@ -121,8 +121,12 @@ export function ohlcExtent(data: ChartData): [number, number] | null {
 /**
  * Value domain covering every raw high/low, `nice()`d; null when no entry is a
  * usable OHLC shape. Pure, so it is unit-testable without mounting a chart.
+ *
+ * `log` (v0.4.0) rounds to whole decades instead of nice linear multiples — a
+ * price series over years is a real log-axis case, and the linear convention
+ * would contribute a 0 floor to an axis that has no zero.
  */
-export function ohlcValueDomain(data: ChartData): [number, number] | null {
+export function ohlcValueDomain(data: ChartData, log = false): [number, number] | null {
   const ext = ohlcExtent(data);
   if (!ext) return null;
   let [lo, hi] = ext;
@@ -130,8 +134,7 @@ export function ohlcValueDomain(data: ChartData): [number, number] | null {
     lo -= 1;
     hi += 1;
   }
-  const nice = new LinearScale([lo, hi]).nice(5).domain();
-  return [nice[0], nice[1]];
+  return niceValueDomain(lo, hi, log);
 }
 
 /** True when a raw datum carries a full open/high/low/close (either encoding). */
@@ -214,8 +217,8 @@ export function makeFinancialDefinition(id: 'candlestick' | 'ohlc'): ChartTypeDe
      * entries the generic value extent cannot read (`y` is only the close).
      * Pipeline stage — the caller's `yAxis` stays the caller's.
      */
-    extendValueDomain(_model, opts) {
-      return ohlcValueDomain(opts.data);
+    extendValueDomain(model, opts) {
+      return ohlcValueDomain(opts.data, model.valueAxisLog);
     },
 
     layout(ctx): TypeGeom {

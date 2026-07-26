@@ -5,17 +5,26 @@ TypeScript, React, Vue, Svelte, and Angular.
 
 ## Install
 
+**One package, not two.** Install the wrapper for your framework — it depends on
+core and re-exports core's whole public surface, so `@chartcraft/core` does not
+need to be a second direct dependency:
+
 ```sh
-npm install @chartcraft/core            # always required
-npm install @chartcraft/react           # if you use React 18+
-npm install @chartcraft/vue             # if you use Vue 3
-npm install @chartcraft/svelte          # if you use Svelte 4 or 5
-npm install @chartcraft/angular         # if you use Angular 20+
+npm install @chartcraft/react           # React 18+
+npm install @chartcraft/vue             # Vue 3
+npm install @chartcraft/svelte          # Svelte 4 or 5
+npm install @chartcraft/angular         # Angular 20+
+npm install @chartcraft/core            # vanilla / no framework
 ```
 
 `@chartcraft/core` has zero runtime dependencies and ships ESM, CJS, and
-TypeScript declarations. The wrappers re-export all core types, so you rarely
-need to import from core directly in framework code.
+TypeScript declarations. Since **0.4** each wrapper re-exports every core
+*value* as well as every core *type* — `createChart`, `version`, `lightTheme`,
+`darkTheme`, `categoricalPalette`, `sequentialPalette`, `sequentialRampFor`, the
+four scale classes, `downsampleLTTB` and the four decorator functions — as named
+re-exports that tree-shake, so importing `lightTheme` from a wrapper is
+byte-identical to importing it from core. Import everything from the one
+package.
 
 ## Your first chart (vanilla)
 
@@ -69,18 +78,22 @@ The React wrapper spreads `ChartOptions` as props and adds `className`,
 ```tsx
 import { BarChart } from '@chartcraft/react';
 
+// Hoisted to module scope: a referentially stable `data` is a correctness
+// requirement, not an optimisation — see the React guide.
+const data = {
+  categories: ['Q1', 'Q2', 'Q3', 'Q4'],
+  series: [
+    { name: 'Product', data: [12.4, 13.1, 14.8, 16.2] },
+    { name: 'Services', data: [6.1, 6.4, 7.0, 7.9] },
+  ],
+};
+
 export function RevenueChart() {
   return (
     <BarChart
       title="Revenue by quarter"
       subtitle="FY2025, USD millions"
-      data={{
-        categories: ['Q1', 'Q2', 'Q3', 'Q4'],
-        series: [
-          { name: 'Product', data: [12.4, 13.1, 14.8, 16.2] },
-          { name: 'Services', data: [6.1, 6.4, 7.0, 7.9] },
-        ],
-      }}
+      data={data}
       style={{ height: 360 }}
     />
   );
@@ -88,8 +101,10 @@ export function RevenueChart() {
 ```
 
 Prop changes call `chart.update(...)` (a diffed re-render, not a rebuild), and
-unmounting calls `chart.destroy()` for you. See the
-[React guide](frameworks/react.md).
+unmounting calls `chart.destroy()` for you. Option props are diffed **by
+identity**, so `useMemo` (or module scope) any object- or array-valued prop —
+an inline literal is a new object every render. See
+[Memoise your option props](frameworks/react.md#memoise-your-option-props).
 
 ## Your first chart (Vue)
 
@@ -158,7 +173,7 @@ Standalone components, signal inputs and outputs, no `NgModule` and no
 ```ts
 import { Component, signal } from '@angular/core';
 import { CcBarChart } from '@chartcraft/angular';
-import type { TypedChartOptions } from '@chartcraft/angular';
+import type { ChartSpec } from '@chartcraft/angular';
 
 @Component({
   selector: 'app-revenue',
@@ -166,7 +181,7 @@ import type { TypedChartOptions } from '@chartcraft/angular';
   template: `<cc-bar-chart [options]="options()" style="height: 360px" />`,
 })
 export class RevenueComponent {
-  readonly options = signal<TypedChartOptions>({
+  readonly options = signal<ChartSpec>({
     title: 'Revenue by quarter',
     data: {
       categories: ['Q1', 'Q2', 'Q3', 'Q4'],

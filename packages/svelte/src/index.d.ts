@@ -13,15 +13,64 @@ import type { Chart as CoreChart, ChartEventMap, ChartOptions, ChartType, PointE
 /** The live chart instance type (core's `Chart` interface, renamed to avoid colliding with the `Chart` component). */
 export type ChartInstance = CoreChart;
 
+/**
+ * A chart's options with no `type` — the shape for holding chart configuration
+ * in its own module (`specs.ts`) and passing it to the matching per-type
+ * component. Identical in every ChartCraft wrapper (`@chartcraft/react`,
+ * `@chartcraft/vue`, `@chartcraft/svelte`, `@chartcraft/angular`).
+ *
+ * ```ts
+ * // specs.ts
+ * import type { ChartSpec } from '@chartcraft/svelte';
+ * export const revenue: ChartSpec = { title: 'Revenue', data: { ... } };
+ * ```
+ * ```svelte
+ * <BarChart options={revenue} />
+ * ```
+ */
+export type ChartSpec = Omit<ChartOptions, 'type'>;
+
+/*
+ * ---------------------------------------------------------------------------
+ * Core's runtime values, re-exported so `@chartcraft/svelte` is the only import
+ * an app needs. Named re-exports only (never `export *`), so a bundler can drop
+ * the ones a consumer does not mention. See src/index.js.
+ * ---------------------------------------------------------------------------
+ */
+export {
+  createChart,
+  version,
+  lightTheme,
+  darkTheme,
+  categoricalPalette,
+  sequentialPalette,
+  sequentialRampFor,
+  LinearScale,
+  TimeScale,
+  BandScale,
+  LogScale,
+  downsampleLTTB,
+  registerDecorator,
+  unregisterDecorator,
+  decorators,
+  clearDecorators,
+} from '@chartcraft/core';
+
 // Re-export all public core types (core's `Chart` is available as `ChartInstance` above).
 export type {
   ChartOptions,
   ChartType,
   ChartData,
   SeriesOptions,
+  SeriesKind,
+  SeriesData,
   DataValue,
   DataPoint,
   TreeNode,
+  GraphData,
+  GraphNodeInput,
+  GraphLinkInput,
+  SampleList,
   AxisOptions,
   LegendOptions,
   TooltipOptions,
@@ -47,13 +96,35 @@ export type {
   Viewport,
 } from '@chartcraft/core';
 
-export interface ChartProps {
+/**
+ * Svelte-5-style callback props. Every bridged event is available as a plain
+ * prop as well as an `on:` directive, so a Svelte 5 (and, later, Svelte 6) app
+ * never needs the deprecated directive. Callback props receive the payload
+ * directly; `on:` handlers receive a `CustomEvent` whose `detail` is the payload.
+ */
+export interface ChartCallbackProps {
+  onpointclick?: (ev: PointEvent) => void;
+  onpointenter?: (ev: PointEvent) => void;
+  onpointleave?: (ev: PointEvent) => void;
+  onlegendtoggle?: (ev: ChartEventMap['legendtoggle']) => void;
+  onzoom?: (ev: ChartEventMap['zoom']) => void;
+  onannotationclick?: (ev: ChartEventMap['annotationclick']) => void;
+  /**
+   * Called once with the live instance, as soon as it exists. Prefer this (or
+   * `on:ready`) over `bind:this` + `getChart()` for setup code: `bind:this`
+   * lands before the child's `onMount`, so `getChart()` can still return `null`
+   * when called from a parent's own `onMount`.
+   */
+  onready?: (chart: ChartInstance) => void;
+}
+
+export interface ChartProps extends ChartCallbackProps {
   options: ChartOptions;
   class?: string;
 }
 
-export interface TypedChartProps {
-  options: Omit<ChartOptions, 'type'>;
+export interface TypedChartProps extends ChartCallbackProps {
+  options: ChartSpec;
   class?: string;
 }
 
@@ -65,12 +136,19 @@ export interface ChartEvents {
   // v0.3
   zoom: CustomEvent<ChartEventMap['zoom']>;
   annotationclick: CustomEvent<ChartEventMap['annotationclick']>;
+  // v0.3.1 — lifecycle, not a core event
+  ready: CustomEvent<ChartInstance>;
 }
 
 /**
  * `<Chart {options} on:pointclick on:pointenter on:pointleave on:legendtoggle
- *   on:zoom on:annotationclick />`
- * Instance access: `bind:this={component}` then `component.getChart()`.
+ *   on:zoom on:annotationclick on:ready />`
+ *
+ * or, without any deprecated directive:
+ * `<Chart {options} onpointclick={handle} onready={setup} />`
+ *
+ * Instance access: `on:ready` / `onready` (reliable from setup code), or
+ * `bind:this={component}` then `component.getChart()`.
  */
 export class Chart extends SvelteComponent<ChartProps, ChartEvents, Record<string, never>> {
   getChart(): ChartInstance | null;

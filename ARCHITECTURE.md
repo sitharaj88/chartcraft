@@ -50,7 +50,8 @@ examples/    — runnable vanilla HTML demos against the built core
    `prefers-color-scheme`. Because forced colors is a *user* preference it
    overrides `theme: 'dark'` and a custom `Theme` object alike. A forced palette
    offers only three usable foreground roles, so series 4+ separate by the same
-   composite encoding described in §4, and `up`/`down` collapse to one color —
+   composite encoding described in §4, and `up`/`down`/`warning` collapse to one
+   color —
    which is exactly why `candlestick` encodes rise and fall with a **fill**
    (hollow rising bodies), not with hue.
 
@@ -59,7 +60,14 @@ examples/    — runnable vanilla HTML demos against the built core
    `packages/core/src/theme/` for light and dark. The ordering is a
    colorblind-safety mechanism (adjacent-pair CVD ΔE ≥ 8) — never re-sort it,
    never *generate* a 9th hue. Series color follows the series identity, never
-   its rank after filtering.
+   its rank after filtering — which is why `PointEvent`/`TooltipPoint` carry the
+   resolved `color` of the mark: an app that re-derives a swatch from a series'
+   array index gets a colour the chart is not using.
+
+   **Status colors are a separate, three-step scale** — `up`, `warning`, `down`
+   (plus `neutral` for chrome) — identical in both schemes, because a status
+   colour carries a meaning and must not shift hue with the surface. They never
+   impersonate a categorical slot, and no consumer should have to hardcode one.
 
    **Past slot 8** the library reuses the hue order and adds a second,
    non-color channel — a **dash pattern** on line-family marks and a
@@ -159,6 +167,30 @@ Two pipeline extensions keep cross-cutting features out of the chart types:
   shapes where that is not obviously equivalent — a stacked model, whose
   `y0`/`y1` are index-aligned to a stack pass, and a band x axis, which ignores
   the viewport by design.
+
+  A viewport **survives an `update()`** unless the new data makes it meaningless,
+  and the discriminator is the DOMAIN rather than which option keys the payload
+  carried (`chart.ts#viewportSurvives`): the chart type and x-axis kind must be
+  unchanged, an `x` window needs an unchanged x extent and a `y` window an
+  unchanged value extent. This is what makes zoom usable through the wrappers,
+  every one of which re-sends the whole `options` object — `data` included — on
+  any change, so keying off "the payload mentions `data`" made a theme toggle
+  destroy the user's zoom. It reads numbers the layout already computed, so the
+  check costs the same at 1M points as at 10, and a reset always **emits `zoom`**
+  so an app's Reset affordance cannot disagree with the actual state.
+
+## Axis kind is a property the domain stages consult (v0.4.0)
+
+A **log** value axis has no zero, no negative half and no outward direction
+toward either, so every stage that widens a value domain asks the axis first
+(`DataModel.valueAxisLog`, resolved once from the registry's `valueAxisOf`): zero
+anchoring does not apply, rounding goes to whole decades through the one shared
+`niceValueDomain` helper, a stack's zero floor is replaced by the cumulative
+tops, and any non-positive bound — from a type, a decorator, an explicit `min` or
+a zoom edge — is discarded rather than clamped to an epsilon. A value ≤ 0 in the
+DATA becomes a gap (`null`, the representation `NaN`/`±Infinity` already fold to)
+with one warning per chart; it is not an error, because the library throws only
+for structural impossibilities where there is nothing to draw at all.
 
 Stochastic layouts (word cloud, force-directed network) are **seeded and
 deterministic** — no `Math.random()` — so renders are reproducible and

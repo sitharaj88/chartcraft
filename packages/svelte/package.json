@@ -1,6 +1,6 @@
 {
   "name": "@chartcraft/svelte",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "ChartCraft Svelte wrapper — thin lifecycle/event bridge around @chartcraft/core (ships source .svelte components)",
   "license": "MIT",
   "author": { "name": "Sitharaj", "url": "https://sitharaj.in" },
@@ -36,7 +36,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@chartcraft/core": "0.3.0"
+    "@chartcraft/core": "0.4.0"
   },
   "peerDependencies": {
     "svelte": ">=4"

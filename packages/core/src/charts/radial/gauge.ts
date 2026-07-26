@@ -12,8 +12,10 @@
  * - NO legend, ever. Keyboard: a single focusable datum announcing the value
  *   and range; a11y table = one row (name, value, min, max).
  */
+import type { Theme } from '../../types';
 import type { PointPos, RenderContext, TypeGeom } from '../../layout';
 import { axisTickFont } from '../../layout';
+import { warningColor } from '../../theme';
 import type { ChartTypeDefinition } from '../registry';
 import type { A11yTableSpec } from '../../a11y';
 import { formatValue } from '../../util';
@@ -31,7 +33,53 @@ export const GAUGE_THICKNESS_RATIO = 0.15;
 
 export interface GaugeBand {
   to: number;
+  /**
+   * v0.4.0 — OPTIONAL. Omit it to take the themed status default for the band's
+   * position (`resolveGaugeBands`).
+   */
+  color?: string;
+}
+
+/** A band whose colour has been resolved — what the renderer works with. */
+export interface ResolvedGaugeBand {
+  to: number;
   color: string;
+}
+
+/**
+ * Fill in the colour of every band that did not name one (v0.4.0).
+ *
+ * `bands[].color` used to be required while `Theme` exposed only `up`, `down`
+ * and `neutral` — which covers two of the three steps a real gauge wants, so the
+ * middle "warning" band forced every consumer to hardcode a hex and stop being
+ * themed at all. With `theme.warning` present the default writes itself:
+ *
+ * | bands | defaults                          |
+ * |-------|-----------------------------------|
+ * | 1     | `neutral` (a single band states no comparison — it is just a track) |
+ * | 2     | `up`, `down`                      |
+ * | 3     | `up`, `warning`, `down`           |
+ * | n     | `up`, `warning` × (n−2), `down`    |
+ *
+ * THE POLARITY ASSUMPTION, stated because it is an assumption: bands are
+ * ASCENDING value ranges, and the default reads them as ascending SEVERITY —
+ * low is good, high is bad, which is the convention for the utilization,
+ * capacity, load and error-rate gauges this default exists for. A gauge whose
+ * polarity runs the other way (uptime, SLA attainment, test coverage) must name
+ * its colours; the library cannot infer which direction is "bad" from a number.
+ *
+ * Per band, not per list: a band that named a colour keeps it, so
+ * `[{ to: 60 }, { to: 85 }, { to: 100, color: brandRed }]` is a legal mix.
+ */
+export function resolveGaugeBands(bands: readonly GaugeBand[], theme: Theme): ResolvedGaugeBand[] {
+  const n = bands.length;
+  // `theme.warning` is an optional slot; `warningColor` is the one place its
+  // validated fallback lives (a custom theme predating the slot still themes).
+  const warning = warningColor(theme);
+  return bands.map((b, i) => ({
+    to: b.to,
+    color: b.color ?? (n === 1 ? theme.neutral : i === 0 ? theme.up : i === n - 1 ? theme.down : warning),
+  }));
 }
 
 /** Angle for a value on the arc (clamped into [min, max]). */
@@ -50,7 +98,11 @@ export interface GaugeBandSegment {
 }
 
 /** Band value ranges mapped to arc segments (clamped, in declaration order). */
-export function gaugeBandSegments(bands: readonly GaugeBand[], min: number, max: number): GaugeBandSegment[] {
+export function gaugeBandSegments(
+  bands: readonly ResolvedGaugeBand[],
+  min: number,
+  max: number,
+): GaugeBandSegment[] {
   const out: GaugeBandSegment[] = [];
   let from = min;
   for (const b of bands) {
@@ -71,7 +123,11 @@ export function gaugeBandSegments(bands: readonly GaugeBand[], min: number, max:
 }
 
 /** Color of the band a value falls in (first band with value <= to). */
-export function gaugeBandColor(bands: readonly GaugeBand[], value: number, fallback: string): string {
+export function gaugeBandColor(
+  bands: readonly ResolvedGaugeBand[],
+  value: number,
+  fallback: string,
+): string {
   for (const b of bands) {
     if (value <= b.to) return b.color;
   }
@@ -160,7 +216,9 @@ export const gaugeDefinition: ChartTypeDefinition = {
     const { r, theme: t, opts } = ctx;
     const f = ctx.geom.extra as GaugeFrame | undefined;
     if (!f) return;
-    const bands = opts.gauge?.bands ?? [];
+    // Colours are resolved ONCE here: a band that named none takes the themed
+    // status default for its position (`resolveGaugeBands`).
+    const bands = resolveGaugeBands(opts.gauge?.bands ?? [], t);
 
     // Track: band colors when bands are configured, else gridline.
     if (bands.length > 0) {

@@ -57,9 +57,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { DumbbellChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Median annual contract value by segment',
   subtitle: '2021 vs 2025 ($k)',
   data: {

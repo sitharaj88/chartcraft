@@ -38,9 +38,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { RadarChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Vendor evaluation',
   subtitle: 'Weighted scores, 0–10',
   data: {

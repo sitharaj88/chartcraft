@@ -75,6 +75,8 @@ const pointEvent: PointEvent = {
   dataIndex: 1,
   x: 1,
   y: 2,
+  // core resolves this from the palette; the wrapper only forwards it.
+  color: '#3b6ea5',
   clientX: 10,
   clientY: 20,
   native: null,

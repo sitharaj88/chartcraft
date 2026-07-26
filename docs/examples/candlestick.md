@@ -53,7 +53,7 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { CandlestickChart, OhlcChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
 const d = (day: number) => new Date(Date.UTC(2026, 5, day));
 
@@ -73,7 +73,7 @@ const prices: [Date, number, number, number, number][] = [
   [d(16), 90.1, 91.2, 89.0, 90.7],
 ];
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Candlestick',
   subtitle: 'ACME — daily, June 2026 (USD)',
   data: {

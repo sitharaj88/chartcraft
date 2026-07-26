@@ -71,9 +71,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { WordcloudChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Most frequent terms in support tickets',
   subtitle: 'Last 30 days · size ∝ mentions (exact counts in the tooltip)',
   wordcloud: { minFontSize: 13, maxFontSize: 52, rotate: false },

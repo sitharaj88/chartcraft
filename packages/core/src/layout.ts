@@ -12,7 +12,7 @@ import type { AxisArrangement, ResolvedAxisChrome } from './charts/registry';
 import type { Viewport } from './decorate';
 import { BandScale } from './scales/band';
 import { LinearScale } from './scales/linear';
-import { LogScale } from './scales/log';
+import { LogScale, positiveLogDomain } from './scales/log';
 import { TimeScale } from './scales/time';
 import { clamp, formatDate, formatNumber, formatValue } from './util';
 
@@ -177,6 +177,24 @@ function makeValueScale(
   }
 
   if (axis.type === 'log') {
+    // v0.4.0 — the LAST line of defence for "a log axis derives its domain from
+    // the positive DATA only". `domain` (the model's value extent) is already
+    // positive by the time it gets here: model.ts keeps non-positive values,
+    // zero anchoring and non-positive widenings out of it. What this catches is
+    // the bounds a CALLER can still inject below it — an explicit `min: 0` or
+    // `min: -10`, or a `zoomTo`/brush viewport whose lower edge crossed zero.
+    // Such a bound is DISCARDED (silently clamping it to an epsilon is the
+    // twelve-decade bug) and the data-derived bound stands in its place, which is
+    // exactly what an unspecified bound would have produced.
+    const derived = positiveLogDomain(domain[0], domain[1]);
+    if (!(hi > 0)) {
+      hi = derived[1];
+      explicitMax = false;
+    }
+    if (!(lo > 0) || lo >= hi) {
+      lo = derived[0] < hi ? derived[0] : hi / 10;
+      explicitMin = false;
+    }
     const scale = new LogScale([lo, hi]);
     if (!explicitMin || !explicitMax) {
       const nice = new LogScale([lo, hi]).nice().domain();
@@ -269,6 +287,9 @@ export function computeCartesianLayout(args: CartesianLayoutArgs): Layout {
     if (typeof o.xAxis.min === 'number') lo = o.xAxis.min;
     if (typeof o.xAxis.max === 'number') hi = o.xAxis.max;
     if (vpX) [lo, hi] = vpX;
+    // A log DATA axis gets the same guarantee as a log value axis: no
+    // non-positive bound reaches the scale, whatever contributed it.
+    if (m.xType === 'log') [lo, hi] = positiveLogDomain(lo, hi);
     xCont = m.xType === 'time' ? new TimeScale([lo, hi]) : m.xType === 'log' ? new LogScale([lo, hi]) : new LinearScale([lo, hi]);
     xSpanMs = Math.abs(hi - lo);
   }

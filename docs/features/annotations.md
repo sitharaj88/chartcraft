@@ -44,8 +44,21 @@ whichever screen direction each happens to be. That is the same vocabulary the
 [zoom viewport](./zoom-pan-brush.md) uses, so `horizontal: true` charts need no
 special casing.
 
-On a **band (category) axis**: a `string` or `Date` is looked up as a category, and
-a `number` is a band index. Anything that cannot be placed yields no geometry.
+On a **band (category) axis**, `line` and `band` annotations are positioned by
+**band index**: their `value` / `from` / `to` are typed `number | Date`, so a
+category *name* does not typecheck — pass `categories.indexOf('Wed')` instead of
+`'Wed'`. (`point` and `text` annotations are the exception: their `x` is
+`number | Date | string`, so those two do accept a category name.) Anything that
+cannot be placed yields no geometry.
+
+```ts
+const categories = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+
+const annotations: Annotation[] = [
+  { kind: 'line', axis: 'x', value: categories.indexOf('Wed'), label: 'Deploy' },
+  { kind: 'text', x: 'Wed', y: 150, text: 'Deploy' },   // x accepts the name here
+];
+```
 
 ## Clicks
 

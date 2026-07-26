@@ -1,8 +1,12 @@
 # `@chartcraft/core` API reference
 
-Complete reference for the public surface of `@chartcraft/core` v0.3, as
+Complete reference for the public surface of `@chartcraft/core` v0.4, as
 defined by the [API contract](../api-contract.md). Every type below is
-exported from the package root.
+exported from the package root — and re-exported, name for name, by
+`@chartcraft/react`, `@chartcraft/vue`, `@chartcraft/svelte` and
+`@chartcraft/angular`, so a framework app needs only the one package. (Core's
+`Chart` *interface* is the single exception: it collides with each wrapper's
+`Chart` *component*, so wrappers export it as `ChartInstance`.)
 
 Sections:
 
@@ -59,6 +63,7 @@ export const lightTheme: Theme;                   // built-in light theme
 export const darkTheme: Theme;                    // built-in dark theme
 export const categoricalPalette: { light: string[]; dark: string[] }; // 8 slots each
 export const sequentialPalette: string[];         // blue ramp, light → dark
+export function sequentialRampFor(scheme: 'light' | 'dark'): string[]; // ramp oriented for a surface
 
 export { LinearScale, TimeScale, BandScale, LogScale };  // scale classes
 export { downsampleLTTB };                               // LTTB downsampling
@@ -109,8 +114,15 @@ Merge semantics: objects merge recursively; arrays (`series`, `data`,
 updates by identity (`id` ?? `name`) — see
 [stable identity](../concepts/data-model.md#stable-series-identity).
 
-Supplying new `data` or a new `type` **resets the zoom viewport**, because the
-window is expressed in the previous data's units.
+**The zoom viewport survives an update unless the new data makes it meaningless**
+(v0.4). The discriminator is the computed **domains**, not which keys the payload
+carried: the `type` and the x-axis kind must be unchanged, an `x` window needs an
+unchanged x extent and a `y` window an unchanged value extent. So a theme change,
+an identical re-send, or new values on the same timestamps all keep the window —
+which matters most through the framework wrappers, since they re-send the whole
+options object (`data` included) on any change. A reset **always** emits
+`zoom: null`. Full rules:
+[The viewport across an update](../features/zoom-pan-brush.md#the-viewport-across-an-update).
 
 ### `setData(data)`
 
@@ -223,7 +235,9 @@ The programmatic path for [zoom](../features/zoom-pan-brush.md). `null` resets.
 Emits the [`zoom`](#events) event. Ranges are in **data units** (epoch ms on a
 time axis) and apply to **continuous axes only** — band (category) axes ignore the
 viewport. An axis that ends up spanning its full data bounds is dropped, and an
-empty viewport normalizes to `null`.
+empty viewport normalizes to `null`. On a **log** axis a non-positive window edge
+is discarded rather than clamped, like any other bound
+([why](../concepts/scales-and-axes.md#log-axes)).
 
 ### `el`
 
@@ -361,6 +375,7 @@ type DataValue =
   | [number | Date, number | null]                 // [x, y] pair
   | [number | Date, number, number]                // [x, y, r] bubble triple OR [x, low, high] range
   | [number | Date, number, number, number, number] // [x, o, h, l, c] candlestick/ohlc
+  | number[]                                       // boxplot / violin: raw samples for one category
   | DataPoint;                                     // rich object form
 ```
 
@@ -372,6 +387,7 @@ The interchangeable shapes (a series may use any one of them):
 | `[x, y]` | the tuple's first element (`number` or `Date`) | time series, scatter |
 | `[x, y, r]` | first element | bubble triples — **or** `[x, low, high]` on range types (`rangearea`, `dumbbell`), which read a three-element tuple as a range |
 | `[x, o, h, l, c]` | first element | candlestick/OHLC |
+| `number[]` | `categories[index]` | `boxplot` / `violin`: the raw observations for one category, summarized by the chart |
 | `DataPoint` object | `x` if present (also accepts `string`), else category/index | pie/donut slices, per-point labels or color overrides, and every v0.2/v0.3 object shape below |
 
 `y: null` is an explicit **gap**: lines break (no interpolation), no bar is
@@ -431,12 +447,12 @@ fires for indices beyond the top-level count. Tooltips, hit-testing, focus
 announcements and the a11y table always describe the correct node.
 :::
 
-::: warning Raw sample arrays still need an assertion
+::: tip Raw sample arrays need no assertion either, since v0.3
 `histogram` takes `number[]` per series, and `boxplot`/`violin` take a raw
-`number[]` **per category**. The `DataValue` union only names the 2/3/5-element
-tuple shapes, so a longer per-category array needs
-`values as unknown as DataValue`. This is the one remaining shape the public types
-cannot express.
+`number[]` **per category**. Both typecheck directly: the `DataValue` union names
+the per-category sample list alongside the tuple shapes, so a `number[][]`
+assigns to `DataValue[]` as-is. If you have older code carrying
+`values as unknown as DataValue`, the assertion is now dead weight — delete it.
 :::
 
 ---
@@ -476,7 +492,28 @@ Single series, single value, 270° arc; the subtitle carries the units.
 |---|---|---|---|
 | `min` | `number` | `0` | Range start. |
 | `max` | `number` | `100` | Range end. |
-| `bands` | `{ to: number; color: string }[]` | none | Optional colored ranges (each band runs from the previous `to` up to its own). With bands, the track shows band colors at 0.35 alpha and the value arc overlays them at full alpha in the color of the band the value falls in. Without bands, the value arc is `theme.series[0]` over a gridline-colored track. |
+| `bands` | `{ to: number; color?: string }[]` | none | Optional colored ranges (each band runs from the previous `to` up to its own). With bands, the track shows band colors at 0.35 alpha and the value arc overlays them at full alpha in the color of the band the value falls in. Without bands, the value arc is `theme.series[0]` over a gridline-colored track. |
+
+::: tip `bands[].color` is optional since v0.4
+Omit it and the band takes the themed status color for its **position**:
+
+| bands | defaults |
+|---|---|
+| 1 | `theme.neutral` (a single band states no comparison — it is just a track) |
+| 2 | `theme.up`, `theme.down` |
+| 3 | `theme.up`, `theme.warning`, `theme.down` |
+| n | `theme.up`, `theme.warning` × (n−2), `theme.down` |
+
+Per band, not per list — `[{ to: 60 }, { to: 85 }, { to: 100, color: brandRed }]`
+is a legal mix, and a named color is never overwritten.
+
+**The polarity assumption**, stated because it is an assumption: bands are
+*ascending value ranges*, and the defaults read them as ascending **severity** —
+low is good, high is bad. That is the convention for the utilization, capacity,
+load and error-rate gauges this default exists for. A gauge whose polarity runs
+the other way (uptime, SLA attainment, test coverage) must name its colors; the
+library cannot infer which direction is "bad" from a number.
+:::
 
 ### `waterfall`
 
@@ -712,8 +749,8 @@ not screen direction — see the note in [`ChartOptions`](#chartoptions).
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `label` | `string` | `undefined` | Axis title. |
-| `min` | `number \| 'auto'` | `'auto'` | Domain minimum. `'auto'` fits the data; bar/area baselines anchor at 0 for non-negative data. Must be > 0 on a `log` axis. |
-| `max` | `number \| 'auto'` | `'auto'` | Domain maximum. `'auto'` adds headroom above the data. |
+| `min` | `number \| 'auto'` | `'auto'` | Domain minimum. `'auto'` fits the data; bar/area baselines anchor at 0 for non-negative data (**not** on a `log` axis). On a `log` axis a non-positive value is **discarded**, not clamped — the data-derived bound stands in. |
+| `max` | `number \| 'auto'` | `'auto'` | Domain maximum. `'auto'` adds headroom above the data — whole decades on a `log` axis. Same non-positive rule as `min`. |
 | `type` | `'linear' \| 'time' \| 'log' \| 'category'` | inferred | Inferred from the data: categories/string x → `category`, `Date` x → `time`, numeric → `linear`. **`log` is never inferred.** `gantt` pins `'time'`. |
 | `ticks.count` | `number` | from axis size | Approximate tick count; the scale picks "nice" values near it. |
 | `ticks.format` | `(value: number \| Date \| string) => string` | locale default | Tick label formatter. Also used for tooltip `formattedX`/`formattedY` and the data table. |
@@ -722,6 +759,18 @@ not screen direction — see the note in [`ChartOptions`](#chartoptions).
 Some types suppress axis chrome by design: `sparkline` (all), `streamgraph` (the
 value axis, margin included), `gantt` (the row axis), `marimekko` and `pyramid`
 (their own layouts). See [Scales and axes](../concepts/scales-and-axes.md).
+
+::: warning `type: 'log'` derives its domain from the positive data only (v0.4)
+Zero anchoring is skipped, rounding is to whole decades, a stacked series
+contributes its cumulative tops rather than its zero floor, and a non-positive
+bound from any source — `min`/`max`, a chart type's own widening, a decorator, a
+zoom-viewport edge — is discarded rather than clamped. A **value** ≤ 0 in the data
+becomes a `null` gap (excluded from the domain, `—` in the table and in
+`exportData()`) with one `console.warn` per chart instance; it is never an error.
+Applies to a log x axis too, and — since axis options bind by role — to a
+horizontal chart's value axis. Full rules:
+[Log axes](../concepts/scales-and-axes.md#log-axes).
+:::
 
 ### `LegendOptions`
 
@@ -789,7 +838,8 @@ target values every frame.
 | `title` | `string` | `options.title`, else generated | The chart's `aria-label`. |
 | `description` | `string` | `undefined` | Longer prose description. Concatenated with the chart type's own description and any decorator's (annotations, unmatched choropleth rows) into **one** visually-hidden node. |
 | `table` | `'hidden' \| 'visible' \| 'off'` | `'hidden'` | The parallel data `<table>`. `'off'` removes the DOM table; `exportData()` still works. |
-| `keyboard` | `boolean` | `true` | Arrow-key navigation with `aria-live` announcements. All 39 types ship a keyboard order. |
+| `tableMaxRows` | `number` | `2000` | Maximum rows **materialized into the DOM table**. `Infinity` removes the bound. It is a main-thread budget, not a data policy: a real `<tr>` per datum costs ~115 µs on the reference host, so 100,000 rows would mean an ~11.5 s synchronous stall on every data change. Whatever the bound, the truncation is stated in the table's own `<caption>` and in the accessible description, and `exportData()` is **never** capped. |
+| `keyboard` | `boolean` | `true` | Arrow-key navigation with `aria-live` announcements. All 39 types ship a keyboard order. Navigation walks the **drawn** marks, so it follows downsampling and the zoom window — unlike the table, which reads the full series. |
 
 Full behavior in [Accessibility](../accessibility.md).
 
@@ -831,8 +881,23 @@ interface ChartEventMap {
 | `dataIndex` | `number` | Index of the datum within `series.data` — **or the type's natural mark index**: a bin (histogram), a depth-first node (treemap/sunburst/icicle/circlepack), a rank (wordcloud), a row (bullet, gantt), a reading-order mark (sankey, network — each node followed by its own links). |
 | `x` | `number \| Date \| string \| null` | The datum's x value. |
 | `y` | `number \| null` | The datum's y value. |
+| `color` | `string` | **v0.4.** The color of the mark this event is about, resolved exactly as the chart drew it: a per-datum `color` override, else the mark's own palette slot for the types that assign one *per mark* (`pie`/`donut`, `rose`, `radialbar`, `sunburst`), else the series' slot. Resolved through the same code path as [`TooltipPoint.color`](#tooltippoint), so a click swatch and a tooltip swatch can never disagree. |
 | `clientX`, `clientY` | `number` | Viewport coordinates of the pointer. **`-1` for keyboard-originated events.** |
 | `native` | `Event \| null` | The originating DOM event; `null` when synthesized (keyboard paths). |
+
+::: warning `color` is required — constructing a `PointEvent` needs it
+It exists so a click-driven detail panel never has to re-derive the swatch.
+Re-deriving is not merely tedious but wrong: palette slots follow series
+**identity** (stable across filtering and updates), not the series' current index
+in `data.series`, and per-mark types assign a slot per visible slice — so
+`palette[data.series.indexOf(s)]` silently drifts from what is on screen.
+
+Being **required** (matching `TooltipPoint.color`) keeps `?.` off the common read
+path. Handlers only ever *read* a `PointEvent`, so this is source-compatible for
+them — but code that **constructs** one (a test fixture, a mock, a synthetic
+event) must now supply the field. That type-surface change is why 0.4 is a minor
+release and not a patch.
+:::
 
 ::: warning `dataIndex` and the backing datum
 Payloads are built from `series.points[dataIndex]`. Where a type's mark index is
@@ -865,10 +930,20 @@ every mark into a real backing point.
 | `up` | `string` | Financial rise / waterfall increase. Light `#0ca30c`, dark `#0ca30c`. Status color — never impersonates a series slot. A doji candle (`close === open`) also renders in `up`. |
 | `down` | `string` | Financial fall / waterfall decrease. Light `#d03b3b`, dark `#d03b3b`. |
 | `neutral` | `string` | Waterfall totals & neutral marks, and the violin's inner box. Light `#52514e`, dark `#c3c2b7`. |
+| `warning?` | `string` | **v0.4, and the one OPTIONAL slot.** The caution step between `up` and `down` — a gauge's middle band, a threshold being approached. `#fab219` in both schemes. Omitting it resolves to that same validated value, so a custom theme written against 0.3.0 still compiles **and** still gets a themed caution color. |
 
-A custom theme must provide **every** field, `up`/`down`/`neutral` included — the
-v0.2 status colors are part of the shape, and the v0.3 types lean on the chrome
-colors above for their non-series marks.
+A custom theme must provide **every** field except `warning` —
+`up`/`down`/`neutral` included, since the v0.2 status colors are part of the
+shape, and the v0.3 types lean on the chrome colors above for their non-series
+marks.
+
+`warning` is optional on purpose: `Theme` is a type callers *construct*
+(`theme?: 'light' | 'dark' | 'auto' | Theme`), so making a new field required
+would have broken every hand-written theme on upgrade, with the compile error
+landing in the caller's code. Both built-in themes set it, a partial custom theme
+has it completed when the theme is resolved, and the single internal resolution
+point falls back to `#fab219` — so nothing downstream ever handles `undefined`.
+See [Theming](../concepts/theming.md#warning-slot).
 
 ### Built-in values
 
@@ -886,6 +961,11 @@ order):
 | 7 | `#4a3aa7` | `#9085e9` | | | | |
 | 8 | `#e34948` | `#e66767` | | | | |
 
+Status colors are identical in both schemes — a status color carries a *meaning*,
+so it must not shift hue with the surface: `up` `#0ca30c`, `warning` `#fab219`,
+`down` `#d03b3b`. (`neutral` is chrome, not status: `#52514e` light, `#c3c2b7`
+dark.)
+
 `categoricalPalette` exposes the same slot arrays as
 `{ light: string[]; dark: string[] }`.
 
@@ -898,6 +978,12 @@ order):
 
 It is the default ramp for `heatmap`, `calendar` and `choropleth`, and the source
 of `funnel`'s ordinal stage steps.
+
+`sequentialRampFor(scheme)` returns that ramp **oriented for a surface**: verbatim
+for `'light'`, reversed for `'dark'`, so the highest-magnitude cell is always the
+prominent end rather than the one receding into the background. A caller-supplied
+`ramp` is never reoriented — you chose the direction. See
+[Theming](../concepts/theming.md#sequential-palette).
 
 ---
 
@@ -918,7 +1004,11 @@ chart, or writing formatters that need domain knowledge:
 - `TimeScale` — `Date`/timestamp domain; calendar-aware tick generation (what
   `gantt` runs on).
 - `BandScale` — discrete category domain → equal-width bands (bar layout).
-- `LogScale` — base-10 logarithmic; positive domains only.
+- `LogScale` — base-10 logarithmic; **positive domains only**. A non-positive
+  value handed to `scale()` is clamped to a tiny epsilon to stay finite, but that
+  is a render-time guard for an out-of-domain *value*, never a domain policy: the
+  pipeline keeps non-positive **bounds** out of a log domain in the first place
+  ([why](../concepts/scales-and-axes.md#log-axes)).
 
 Which axis `type` maps to which scale is contract-fixed (see
 [`AxisOptions`](#axisoptions)); the classes' constructor and method details
@@ -956,11 +1046,9 @@ example and the rules a decorator must respect are on the
 import { version } from '@chartcraft/core';
 ```
 
-The package version string — useful in bug reports and runtime feature checks.
+The package version string — useful in bug reports. It reports `'0.4.0'` in this
+build, matching the published package.
 
-::: warning Version string in this build
-`version` still reports **`'0.2.0'`** even though this is the v0.3 feature set:
-bumping the published version is a release step, not a plumbing one. Don't
-feature-detect v0.3 with `version`; detect a capability instead (e.g.
-`typeof chart.exportData === 'function'`).
-:::
+Still, prefer **capability** detection over version parsing for feature checks
+(e.g. `typeof chart.exportData === 'function'`); `version` is documentation, not
+an API contract.

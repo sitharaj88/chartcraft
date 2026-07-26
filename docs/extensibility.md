@@ -1,9 +1,9 @@
 # Extensibility: the decorator API
 
 ::: warning Experimental — may change in a minor release
-This surface is **experimental** in v0.3. Four of its hooks were added *during*
-v0.3 in response to real feature needs and more may follow, so the shape is not
-settled. `registerDecorator` / `unregisterDecorator` / `decorators` /
+This surface is still **experimental** as of v0.4. Four of its hooks were added
+*during* v0.3 in response to real feature needs and more may follow, so the shape
+is not settled. `registerDecorator` / `unregisterDecorator` / `decorators` /
 `clearDecorators` and the `Decorator` interface are what may move.
 
 It is documented and exported because the five built-in cross-cutting features

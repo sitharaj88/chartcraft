@@ -30,8 +30,10 @@ import {
   seriesColor,
   seriesDash,
   type DataModel,
+  type NormalizedSeries,
   type ResolvedOptions,
 } from './model';
+import type { NormalizedPoint } from './data/normalize';
 import { forcedColorsActive, forcedColorsTheme, resolveTheme, watchColorScheme, watchForcedColors } from './theme';
 import { CanvasRenderer } from './render/canvas';
 import type { Renderer } from './render/renderer';
@@ -83,7 +85,7 @@ import { navigate, type NavPosition } from './a11y/keyboard';
 import { Animator, lerp, prefersReducedMotion } from './animation';
 import { caf, deepMerge, formatTemporal, formatValue, raf, uid } from './util';
 
-export const version = '0.3.0';
+export const version = '0.4.0';
 
 type RenderReason = ChartEventMap['render']['reason'];
 
@@ -119,6 +121,60 @@ function coarsePointer(e: Event | null | undefined): boolean {
   if (t === 'touch') return true;
   if (t === 'mouse' || t === 'pen') return false;
   return coarsePointerMedia();
+}
+
+/** Two extents are the same window basis when both are absent or both equal. */
+function sameExtent(a: [number, number] | null, b: [number, number] | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a[0] === b[0] && a[1] === b[1];
+}
+
+/**
+ * Whether an active zoom viewport is still MEANINGFUL against a newly built
+ * model (v0.4.0).
+ *
+ * THE BUG THIS REPLACES. `update()` used to reset the viewport whenever the
+ * payload merely CONTAINED `data`. Every wrapper — React, Vue, Svelte, Angular —
+ * re-sends the whole `options` object on any change, because that is what their
+ * reactivity models hand them, so through a wrapper *every* update carries
+ * `data` and a pure theme toggle silently threw away the user's brush-zoom.
+ *
+ * THE DISCRIMINATOR. A viewport is a WINDOW ONTO A DOMAIN, so the question
+ * "is it still meaningful" is answered by the domain, not by which keys the
+ * caller happened to send:
+ *
+ *  - the chart TYPE and the x AXIS KIND must be unchanged. Both re-interpret the
+ *    numbers themselves (epoch ms vs a bare index vs a band position), so a
+ *    window expressed in the old reading is meaningless under a new one.
+ *  - an `x` window requires an unchanged x extent; a `y` window requires an
+ *    unchanged value extent. Per axis, because the two are independent: a live
+ *    dashboard that appends new VALUES on the same timestamps must keep its
+ *    x-zoom (the window still describes the same span), and the default
+ *    `zoom.axis` is `'x'`, so the common case never consults the value extent at
+ *    all.
+ *
+ * WHY IT IS SOUND. `xDomain`/`yDomain` are computed by `buildModel` from the
+ * points it just normalized, and the caller's `data` was DEEP-CLONED on the way
+ * in — reference equality is unavailable, and equal numbers here mean the data
+ * genuinely occupies the same domain. The comparison is like-for-like because
+ * both models are built under the SAME viewport: when a window is active and
+ * downsampling is windowing the drawn points, both extents describe that window,
+ * so they differ exactly when the new data no longer fills it the same way (a
+ * window the new data does not reach at all becomes an empty slice, whose extent
+ * always differs). A change that moves NEITHER extent leaves every scale, tick
+ * and pixel mapping in the window identical — preserving the viewport there is
+ * not a leniency, it is the correct answer.
+ *
+ * WHY IT IS CHEAP. It reads four numbers that `buildModel` already computed for
+ * the layout; there is no second pass over the data and no fingerprint to hash,
+ * so the check costs the same on 1,000,000 points as on 10.
+ */
+function viewportSurvives(vp: Viewport, prev: DataModel, next: DataModel): boolean {
+  if (prev === next) return true;
+  if (prev.type !== next.type || prev.xType !== next.xType) return false;
+  if (vp.x && !sameExtent(prev.xDomain, next.xDomain)) return false;
+  if (vp.y && !sameExtent(prev.yDomain, next.yDomain)) return false;
+  return true;
 }
 
 export function createChart(container: HTMLElement, options: ChartOptions): Chart {
@@ -356,13 +412,22 @@ class ChartImpl implements Chart {
     const nextOpts = resolveOptions(nextRaw);
     const nextTheme = this.themeFor(nextOpts);
 
-    // New data (or a new type) invalidates a zoom window expressed in the old
-    // data's units, so the viewport resets — every other update keeps it.
-    const nextViewport = 'data' in partial || 'type' in partial ? null : this.viewport;
-
     const modelKeys: (keyof ChartOptions)[] = ['data', 'type', 'stacked', 'horizontal', 'downsample', 'xAxis', 'yAxis'];
     const modelDirty = modelKeys.some((k) => k in partial);
-    const nextModel = modelDirty ? buildModel(nextOpts, this.paletteSlots, nextViewport) : this.model;
+
+    // v0.4.0 — the zoom viewport survives an update unless the NEW DATA makes it
+    // meaningless. It is built against the CURRENT viewport so the comparison
+    // below is like-for-like (see `viewportSurvives`).
+    const trialModel = modelDirty ? buildModel(nextOpts, this.paletteSlots, this.viewport) : this.model;
+    const resetViewport = this.viewport !== null && !viewportSurvives(this.viewport, this.model, trialModel);
+    const nextViewport = resetViewport ? null : this.viewport;
+    // Only a genuine reset pays for a second model, and it pays the CHEAP way:
+    // `rewindowModel` re-slices the retained points instead of re-ingesting the
+    // caller's data (it returns null for the shapes where that is not obviously
+    // equivalent — a stacked model, a band x axis — and then this is a rebuild).
+    const nextModel = resetViewport
+      ? (rewindowModel(trialModel, nextOpts, null) ?? buildModel(nextOpts, this.paletteSlots, null))
+      : trialModel;
     // Trial the layout too: a type's `layout` stage is the third place a payload
     // can be rejected, and it is the one that runs LAST.
     const trial = this.buildLayout(nextOpts, nextTheme, nextModel);
@@ -375,6 +440,12 @@ class ChartImpl implements Chart {
     this.invalidateA11y();
     if ('theme' in partial) this.watchThemeIfAuto();
     this.refresh('update', modelDirty, true, { model: nextModel, ...trial });
+    // A viewport this update THREW AWAY is a state change the app has to hear
+    // about: an app's "Reset zoom" affordance is driven by the `zoom` event, and
+    // a silent reset leaves that button visible pointing at nothing (the second
+    // half of the wrapper defect). Emitted after the commit, so a handler that
+    // calls back into the chart sees the state the event describes.
+    if (resetViewport) this.emitter.emit('zoom', null);
   }
 
   setData(data: ChartData): void {
@@ -1321,6 +1392,34 @@ class ChartImpl implements Chart {
     }
   }
 
+  /**
+   * The colour of the MARK at `(si, pi)`, as drawn. The ONE resolution path for
+   * every surface that reports a mark's colour — `PointEvent.color` and
+   * `TooltipPoint.color` both come from here, so a click swatch and a tooltip
+   * swatch cannot disagree, and neither can drift from the palette logic.
+   *
+   * Order:
+   *
+   * 1. THE DRAWN SLICE, when this chart has slice geometry and one visible
+   *    series. Pie/donut, rose, radialbar and sunburst take their palette slot
+   *    PER MARK in that shape (a pie's slices are eight different colours from
+   *    one series), so the series' slot is not the mark's colour. Reading the
+   *    geometry the renderer used is not a re-derivation — it IS the mark. The
+   *    single-visible-series guard is what makes a `pi` lookup unambiguous:
+   *    `PieSlice` carries no series index, and those same types fall back to the
+   *    series slot as soon as a second series is visible (see
+   *    `computeRadialBarTracks`), which is exactly what step 3 returns.
+   * 2. A per-datum `color` override (`{ x, y, color }`).
+   * 3. The series' palette slot — by series IDENTITY, via `seriesColor`.
+   */
+  private markColor(s: NormalizedSeries, p: NormalizedPoint, pi: number): string {
+    if (this.geom.slices && this.model.series.filter((x) => x.visible).length === 1) {
+      const slice = this.geom.slices.find((sl) => sl.pi === pi);
+      if (slice) return slice.color;
+    }
+    return p.color ? p.color : seriesColor(s, this.theme);
+  }
+
   private pointEventFor(si: number, pi: number, clientX: number, clientY: number, native: Event | null): PointEvent | null {
     const s = this.model.series[si];
     const p = s?.points[pi];
@@ -1331,6 +1430,7 @@ class ChartImpl implements Chart {
       dataIndex: pi,
       x: p.x,
       y: p.y,
+      color: this.markColor(s, p, pi),
       clientX,
       clientY,
       native,
@@ -1626,13 +1726,12 @@ class ChartImpl implements Chart {
     const s = m.series[si];
     const p = s?.points[pi];
     if (!s || !p) return null;
-    let color = seriesColor(s, this.theme);
+    const color = this.markColor(s, p, pi);
     let formattedX = this.formatXValue(p.x);
     if (m.xType === 'category') {
       const cat = m.categories?.[bandIndexFor(m, p.xv, pi)];
       if (cat !== undefined) formattedX = formatCategory(cat, categoryAxisOf(this.def.needs, this.opts, m.horizontal));
     }
-    if (p.color) color = p.color;
     return {
       seriesId: s.id,
       seriesName: s.name,

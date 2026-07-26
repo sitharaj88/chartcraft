@@ -7,6 +7,34 @@ import type { Theme } from '../types';
 
 const FONT_FAMILY = 'system-ui, -apple-system, "Segoe UI", sans-serif';
 
+/**
+ * The status palette's validated CAUTION step (`theme.warning`), v0.4.0.
+ *
+ * Identical in both schemes, exactly as `up` and `down` are: a status colour
+ * carries a MEANING and must not shift hue between light and dark, or the same
+ * band reads as a different state on a different desktop. Taken from the
+ * validated status palette — not invented here, and not derived from a
+ * categorical slot (a status colour must never impersonate a series).
+ *
+ * `Theme.warning` is OPTIONAL (a caller may hand us a complete custom theme
+ * written before the slot existed), so this constant is also the FALLBACK, and
+ * `warningColor` below is the only place that applies it.
+ */
+export const STATUS_WARNING = '#fab219';
+
+/**
+ * A theme's CAUTION colour: its own `warning`, or the validated status step.
+ *
+ * The single resolution point for the slot, so no consumer ever writes
+ * `theme.warning ?? '#fab219'` and no second copy of the hex exists. Both
+ * built-in themes and every theme `resolveTheme` returns already carry one; this
+ * covers a `Theme` object that reached a consumer by another route (a custom
+ * theme written against an older version, a test fixture).
+ */
+export function warningColor(theme: Theme): string {
+  return theme.warning ?? STATUS_WARNING;
+}
+
 /** 8 categorical slots per scheme. Validated order — do not re-sort. */
 export const categoricalPalette: { light: string[]; dark: string[] } = {
   light: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'],
@@ -76,6 +104,7 @@ export const lightTheme: Theme = {
   up: '#0ca30c',
   down: '#d03b3b',
   neutral: '#52514e',
+  warning: STATUS_WARNING,
 };
 
 export const darkTheme: Theme = {
@@ -92,6 +121,7 @@ export const darkTheme: Theme = {
   up: '#0ca30c',
   down: '#d03b3b',
   neutral: '#c3c2b7',
+  warning: STATUS_WARNING,
 };
 
 /** SSR-safe: never touches window at module scope. */
@@ -116,7 +146,14 @@ export function resolveTheme(theme: 'light' | 'dark' | 'auto' | Theme | undefine
   if (theme === 'light') return lightTheme;
   if (theme === 'dark') return darkTheme;
   const base = theme.colorScheme === 'dark' ? darkTheme : lightTheme;
-  return { ...base, ...theme, series: theme.series ?? base.series };
+  // `warning` is completed the same way `series` is: an OPTIONAL slot a spread
+  // would otherwise overwrite with `undefined` when the key is present but unset.
+  return {
+    ...base,
+    ...theme,
+    series: theme.series ?? base.series,
+    warning: theme.warning ?? base.warning,
+  };
 }
 
 /** Subscribe to a media query. Returns an unsubscribe fn. SSR-safe no-op. */
@@ -200,9 +237,12 @@ export function watchForcedColors(onChange: () => void): () => void {
  * typography, and the scheme still selects the sequential ramp's direction
  * (`sequentialRampFor`) for consumers that ask for it.
  *
- * `up`/`down` collapse to `CanvasText`, which is exactly why the financial
- * types encode rise/fall with a redundant FILL channel (hollow rising bodies)
- * rather than with color alone — under forced colors, color carries nothing.
+ * `up`/`down`/`warning` collapse to `CanvasText`, which is exactly why the
+ * financial types encode rise/fall with a redundant FILL channel (hollow rising
+ * bodies) rather than with color alone — under forced colors, color carries
+ * nothing. A gauge's bands lose their separation for the same reason; a forced
+ * palette has three foreground roles, and spending one on "caution" would be
+ * inventing a guarantee the platform does not make.
  */
 export function forcedColorsTheme(base: Theme): Theme {
   return {
@@ -217,6 +257,7 @@ export function forcedColorsTheme(base: Theme): Theme {
     up: 'CanvasText',
     down: 'CanvasText',
     neutral: 'GrayText',
+    warning: 'CanvasText',
     forcedColors: true,
   };
 }

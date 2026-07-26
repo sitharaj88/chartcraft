@@ -11,7 +11,7 @@
  * without a component here fails `tsc`.
  */
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { ChartBase, type TypedChartOptions } from './chart-base';
+import { ChartBase, type ChartSpec } from './chart-base';
 
 // ---------------------------------------------------------------- v0.1 types
 
@@ -22,7 +22,7 @@ import { ChartBase, type TypedChartOptions } from './chart-base';
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcLineChart extends ChartBase<TypedChartOptions> {
+export class CcLineChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'line';
 }
 
@@ -33,7 +33,7 @@ export class CcLineChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcAreaChart extends ChartBase<TypedChartOptions> {
+export class CcAreaChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'area';
 }
 
@@ -44,7 +44,7 @@ export class CcAreaChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcBarChart extends ChartBase<TypedChartOptions> {
+export class CcBarChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'bar';
 }
 
@@ -55,7 +55,7 @@ export class CcBarChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcScatterChart extends ChartBase<TypedChartOptions> {
+export class CcScatterChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'scatter';
 }
 
@@ -66,7 +66,7 @@ export class CcScatterChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcPieChart extends ChartBase<TypedChartOptions> {
+export class CcPieChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'pie';
 }
 
@@ -77,7 +77,7 @@ export class CcPieChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcDonutChart extends ChartBase<TypedChartOptions> {
+export class CcDonutChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'donut';
 }
 
@@ -90,7 +90,7 @@ export class CcDonutChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcBubbleChart extends ChartBase<TypedChartOptions> {
+export class CcBubbleChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'bubble';
 }
 
@@ -101,7 +101,7 @@ export class CcBubbleChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcSparklineChart extends ChartBase<TypedChartOptions> {
+export class CcSparklineChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'sparkline';
 }
 
@@ -112,7 +112,7 @@ export class CcSparklineChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcHistogramChart extends ChartBase<TypedChartOptions> {
+export class CcHistogramChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'histogram';
 }
 
@@ -123,7 +123,7 @@ export class CcHistogramChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcBoxplotChart extends ChartBase<TypedChartOptions> {
+export class CcBoxplotChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'boxplot';
 }
 
@@ -134,7 +134,7 @@ export class CcBoxplotChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcCandlestickChart extends ChartBase<TypedChartOptions> {
+export class CcCandlestickChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'candlestick';
 }
 
@@ -145,7 +145,7 @@ export class CcCandlestickChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcOhlcChart extends ChartBase<TypedChartOptions> {
+export class CcOhlcChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'ohlc';
 }
 
@@ -156,7 +156,7 @@ export class CcOhlcChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcWaterfallChart extends ChartBase<TypedChartOptions> {
+export class CcWaterfallChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'waterfall';
 }
 
@@ -167,7 +167,7 @@ export class CcWaterfallChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcHeatmapChart extends ChartBase<TypedChartOptions> {
+export class CcHeatmapChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'heatmap';
 }
 
@@ -178,7 +178,7 @@ export class CcHeatmapChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcTreemapChart extends ChartBase<TypedChartOptions> {
+export class CcTreemapChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'treemap';
 }
 
@@ -189,7 +189,7 @@ export class CcTreemapChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcSunburstChart extends ChartBase<TypedChartOptions> {
+export class CcSunburstChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'sunburst';
 }
 
@@ -200,7 +200,7 @@ export class CcSunburstChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcFunnelChart extends ChartBase<TypedChartOptions> {
+export class CcFunnelChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'funnel';
 }
 
@@ -211,7 +211,7 @@ export class CcFunnelChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcRadarChart extends ChartBase<TypedChartOptions> {
+export class CcRadarChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'radar';
 }
 
@@ -222,7 +222,7 @@ export class CcRadarChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcGaugeChart extends ChartBase<TypedChartOptions> {
+export class CcGaugeChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'gauge';
 }
 
@@ -235,7 +235,7 @@ export class CcGaugeChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcRangeareaChart extends ChartBase<TypedChartOptions> {
+export class CcRangeareaChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'rangearea';
 }
 
@@ -246,7 +246,7 @@ export class CcRangeareaChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcBulletChart extends ChartBase<TypedChartOptions> {
+export class CcBulletChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'bullet';
 }
 
@@ -257,7 +257,7 @@ export class CcBulletChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcDumbbellChart extends ChartBase<TypedChartOptions> {
+export class CcDumbbellChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'dumbbell';
 }
 
@@ -268,7 +268,7 @@ export class CcDumbbellChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcLollipopChart extends ChartBase<TypedChartOptions> {
+export class CcLollipopChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'lollipop';
 }
 
@@ -279,7 +279,7 @@ export class CcLollipopChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcSlopeChart extends ChartBase<TypedChartOptions> {
+export class CcSlopeChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'slope';
 }
 
@@ -290,7 +290,7 @@ export class CcSlopeChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcStreamgraphChart extends ChartBase<TypedChartOptions> {
+export class CcStreamgraphChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'streamgraph';
 }
 
@@ -301,7 +301,7 @@ export class CcStreamgraphChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcMarimekkoChart extends ChartBase<TypedChartOptions> {
+export class CcMarimekkoChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'marimekko';
 }
 
@@ -312,7 +312,7 @@ export class CcMarimekkoChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcPyramidChart extends ChartBase<TypedChartOptions> {
+export class CcPyramidChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'pyramid';
 }
 
@@ -323,7 +323,7 @@ export class CcPyramidChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcCalendarChart extends ChartBase<TypedChartOptions> {
+export class CcCalendarChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'calendar';
 }
 
@@ -334,7 +334,7 @@ export class CcCalendarChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcRadialbarChart extends ChartBase<TypedChartOptions> {
+export class CcRadialbarChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'radialbar';
 }
 
@@ -345,7 +345,7 @@ export class CcRadialbarChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcRoseChart extends ChartBase<TypedChartOptions> {
+export class CcRoseChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'rose';
 }
 
@@ -356,7 +356,7 @@ export class CcRoseChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcViolinChart extends ChartBase<TypedChartOptions> {
+export class CcViolinChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'violin';
 }
 
@@ -367,7 +367,7 @@ export class CcViolinChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcParallelChart extends ChartBase<TypedChartOptions> {
+export class CcParallelChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'parallel';
 }
 
@@ -378,7 +378,7 @@ export class CcParallelChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcIcicleChart extends ChartBase<TypedChartOptions> {
+export class CcIcicleChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'icicle';
 }
 
@@ -389,7 +389,7 @@ export class CcIcicleChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcCirclepackChart extends ChartBase<TypedChartOptions> {
+export class CcCirclepackChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'circlepack';
 }
 
@@ -400,7 +400,7 @@ export class CcCirclepackChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcWordcloudChart extends ChartBase<TypedChartOptions> {
+export class CcWordcloudChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'wordcloud';
 }
 
@@ -411,7 +411,7 @@ export class CcWordcloudChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcSankeyChart extends ChartBase<TypedChartOptions> {
+export class CcSankeyChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'sankey';
 }
 
@@ -422,7 +422,7 @@ export class CcSankeyChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcGanttChart extends ChartBase<TypedChartOptions> {
+export class CcGanttChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'gantt';
 }
 
@@ -433,7 +433,7 @@ export class CcGanttChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcChoroplethChart extends ChartBase<TypedChartOptions> {
+export class CcChoroplethChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'choropleth';
 }
 
@@ -444,6 +444,6 @@ export class CcChoroplethChart extends ChartBase<TypedChartOptions> {
   host: { style: 'display: block' },
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CcNetworkChart extends ChartBase<TypedChartOptions> {
+export class CcNetworkChart extends ChartBase<ChartSpec> {
   protected override readonly chartType = 'network';
 }

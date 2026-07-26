@@ -29,12 +29,19 @@ Angular wrappers — and accessibility built in, not bolted on.
 ## Install
 
 ```sh
-npm install @chartcraft/core                      # vanilla / any framework
-npm install @chartcraft/core @chartcraft/react    # React 18+
-npm install @chartcraft/core @chartcraft/vue      # Vue 3
-npm install @chartcraft/core @chartcraft/svelte   # Svelte 4 & 5
-npm install @chartcraft/core @chartcraft/angular  # Angular 20+
+npm install @chartcraft/core      # vanilla / any framework
+npm install @chartcraft/react     # React 18+
+npm install @chartcraft/vue       # Vue 3
+npm install @chartcraft/svelte    # Svelte 4 & 5
+npm install @chartcraft/angular   # Angular 20+
 ```
+
+One package, not two: since v0.4 each wrapper re-exports core's complete public
+surface — `lightTheme`, `categoricalPalette`, the scale classes,
+`downsampleLTTB`, the decorator API — so `@chartcraft/core` does not need to be
+a direct dependency. The re-exports are named, and verified to tree-shake:
+importing `lightTheme` from a wrapper is byte-identical to importing it from
+core.
 
 ## Quick start
 

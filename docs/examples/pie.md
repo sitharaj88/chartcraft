@@ -67,9 +67,9 @@ const donut = createChart(document.querySelector<HTMLElement>('#donut')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { PieChart, DonutChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const pie: TypedChartOptions = {
+const pie: ChartSpec = {
   title: 'Revenue by segment',
   subtitle: 'FY2025 share',
   data: {
@@ -92,7 +92,7 @@ const pie: TypedChartOptions = {
   },
 };
 
-const donut: TypedChartOptions = {
+const donut: ChartSpec = {
   title: 'Cloud spend by service',
   subtitle: 'This month',
   data: {

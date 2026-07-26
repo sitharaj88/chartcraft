@@ -5,6 +5,71 @@ ordered; the [API contract](api-contract.md) governs every addition — each of
 these lands as a contract change first, then core, then wrappers, then docs
 (see `CONTRIBUTING.md` in the repository root).
 
+## Shipped in 0.4
+
+**Dogfooding, not more tests.** 0.3 shipped with 1,984 passing tests, and then
+five real sample dashboards were built against the *published* packages. They
+found four defects those tests could not: every one was an **experience** bug —
+the API accepted the options, returned no error, and drew something wrong or lost
+user state. All four are fixed, with 39 new tests pinning the behaviour.
+
+- **[A log value axis derives its domain from the positive data only.](concepts/scales-and-axes.md#log-axes)**
+  A boxplot of all-positive data (1.2 … 260) with `yAxis: { type: 'log' }` used to
+  draw a **1e-12 … 1e3** axis with every box squashed into the top tenth of the
+  plot. Zero anchoring is now skipped, rounding is to whole decades, a stacked
+  series contributes its cumulative tops rather than its zero floor, and a
+  non-positive bound from any source — `min`/`max`, a chart type's own widening, a
+  decorator, a zoom-viewport edge — is *discarded* rather than clamped to an
+  epsilon. A **value** ≤ 0 becomes a `null` gap with one `console.warn`, never an
+  error: a live dashboard must not go blank when a linear axis is flipped to log.
+  Applies to a log x axis and to a horizontal chart's value axis too.
+- **[An options update no longer silently destroys the zoom viewport.](features/zoom-pan-brush.md#the-viewport-across-an-update)**
+  The old rule reset the window whenever the payload merely *contained* `data` —
+  and since every framework wrapper re-sends the whole options object, a pure
+  theme change threw away the user's brush **and emitted no event**. The
+  discriminator is now the computed **domains**, per axis, so new values on the
+  same timestamps keep an x-zoom. A reset always emits `zoom: null`.
+- **[`PointEvent` carries the colour of the mark that was clicked.](api/core.md#pointevent)**
+  `PointEvent.color` resolves through the same path as `TooltipPoint.color`, so a
+  click-driven detail panel's swatch can never disagree with the chart — and no
+  one has to re-derive it from a series index, which is wrong whenever a series is
+  hidden or a type assigns slots per slice. It is **required**, which is why 0.4 is
+  a minor: constructing a `PointEvent` (a test fixture, a mock) now needs the field.
+- **[`theme.warning`, and gauge bands that need no hardcoded hex.](examples/gauge.md#band-colors)**
+  `up`/`down` covered two of the three states a status mark has; the middle one
+  forced every consumer to hardcode a colour. `theme.warning` (`#fab219`, both
+  schemes) is that step, and it is the **one optional slot** on `Theme` so every
+  hand-written custom theme still compiles — and still gets themed.
+  `gauge.bands[].color` is now optional, filled by position.
+
+**Wrapper DX, from the same dogfooding.**
+
+- **One package, not two.** All four wrappers re-export core's complete public
+  value surface as well as its types, so `@chartcraft/core` is no longer a second
+  direct dependency. Named re-exports only, verified to tree-shake.
+- **`ChartSpec`** (`Omit<ChartOptions, 'type'>`) is exported under that one name
+  from all four, for the "options in their own module" pattern every sample uses.
+  `TypedChartOptions` survives as a deprecated alias in Vue and Angular.
+- **React**: memoising option props is a *correctness* requirement, not an
+  optimisation — there is now a development-only warning when the wrapper sees a
+  new-but-deeply-equal option prop three renders in a row, and `ref` is populated
+  before any parent effect runs.
+- **Angular**: a `(ready)` output and `whenReady()`, removing the two-level
+  `this.hero()?.chart()?.…` nullability dance, plus the same dev-mode warning.
+- **Svelte**: all six events work as Svelte 5 **callback props**
+  (`onpointclick`, `onzoom`, …) as well as `on:` directives, on Svelte 4 *and* 5 —
+  so a Svelte 5 app can drop the deprecated directive entirely. Plus
+  `onready`/`on:ready`.
+- **Vue**: no dev warning by design (it deep-watches, so a mutation is never
+  silently lost), but the guidance to hold options in a `ref`/`computed` is now
+  documented.
+
+Still open, and stated honestly in all four framework guides: the per-type
+components share **one loose options type**, so `<GaugeChart>` accepts a `sankey`
+block. They buy the correct `type` string, not a narrowed options shape.
+Narrowing was assessed and deliberately deferred — it would break the shared
+`ChartSpec` pattern, and it is a 1.0-shaped change.
+
 ## Shipped in 0.3
 
 **Twenty new chart types, for 39 total:** range area, bullet, dumbbell,

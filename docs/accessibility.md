@@ -88,14 +88,26 @@ column for a streamgraph, width shares for a marimekko, and `no data` rows for
 choropleth features with no datum. Cross-cutting features contribute too — error
 bars add `± low` / `± high` columns.
 
-::: warning Downsampled series have a downsampled table
-[LTTB downsampling](performance.md#lttb-downsampling) runs on the way into the
-data model, which backs both the canvas *and* the parallel DOM. So on a series
-above `downsample.threshold` the table (and keyboard navigation) describes the
-retained points — ~5,000 rows for a 60,000-point series — and follows the
-[zoom window](features/zoom-pan-brush.md) when one is active. The table is always
-a faithful description of *the chart*; it is not a full data dump. Turn
-downsampling off for charts where every sample must be readable.
+::: tip The table describes the full data, not the downsampled picture
+[LTTB downsampling](performance.md#lttb-downsampling) and the
+[zoom window](features/zoom-pan-brush.md) are lossy views built for the canvas,
+and neither is a defensible basis for a screen reader: LTTB has no notion of which
+rows are *semantically* important, so handing its output to an assistive
+technology would give that user a visual approximation — 5,000 of 60,000 rows —
+with no way to tell anything was dropped, while a sighted user can simply zoom in
+and recover every point.
+
+So the table and [`exportData()`](features/export.md) read the **full** series.
+**Keyboard navigation** walks the drawn marks instead, so a keyboard user
+navigates exactly what is on screen. Whenever the drawn marks and the tabulated
+data differ, the accessible description says so in a sentence ("The plot draws
+5,000 of 60,000 data points (a visual sample of the zoomed window); the data
+table lists the full data.") — the relationship is stated, never silent.
+
+The table itself is bounded by `a11y.tableMaxRows` (default 2,000) so a huge
+series cannot stall the main thread materializing `<tr>`s; that truncation is
+stated in the table's own `<caption>` and in the description, and `exportData()`
+is **never** capped.
 :::
 
 ::: tip `exportData()` emits exactly this table
@@ -168,6 +180,19 @@ user's current reading; one announcement per movement, no queuing floods.
   DOM content, which is precisely why it exists: when the canvas's colors are
   unreliable, the DOM path remains fully usable. Focus indicators use system
   highlight colors.
+
+  The **canvas** participates too: the whole theme is re-expressed in CSS
+  system-color keywords (`Canvas`, `CanvasText`, `GrayText`, `LinkText`,
+  `Highlight`), which a 2D context accepts as `fillStyle` like any other color.
+  Forced colors is a *user* setting, so it wins over `theme: 'dark'` and over a
+  fully custom `Theme` alike. Only three foreground roles are spent on series —
+  series past the third are separated by dash pattern and marker shape instead,
+  because inventing more "hues" from system colors would be inventing contrast
+  guarantees the platform does not make. All four status colors
+  (`up`/`down`/`warning`, and `neutral` → `GrayText`) collapse to that same small
+  set, which is exactly why the financial types encode rise/fall with a redundant
+  **fill** channel; a gauge's bands do lose their color separation, and its value
+  is carried by the big center number regardless.
 - **`prefers-color-scheme`** — with `theme: 'auto'` (default) the chart tracks
   the user's light/dark preference live. Both built-in themes are validated
   for contrast and CVD-safe series separation against their own surface; see

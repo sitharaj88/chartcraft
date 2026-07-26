@@ -22,13 +22,9 @@ violin is normalized to its own peak, so a wide violin does not mean more data.
 
 ```ts [Vanilla]
 import { createChart } from '@chartcraft/core';
-import type { DataValue } from '@chartcraft/core';
 
-// A violin category is a RAW number[] of samples. The `DataValue` union names
-// only the 2/3/5-element tuple shapes, so a longer sample array is asserted
-// once here (the runtime accepts any numeric array).
-const sample = (values: number[]): DataValue => values as unknown as DataValue;
-
+// A violin category is a RAW number[] of samples — no cast needed: the
+// `DataValue` union names the per-category sample list alongside the tuples.
 const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
   type: 'violin',
   title: 'Page load time by device class',
@@ -41,22 +37,22 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
         id: 'lcp',
         name: 'LCP',
         data: [
-          sample([
+          [
             740, 780, 810, 830, 860, 880, 890, 910, 920, 940, 960, 980, 1010, 1040, 1080, 1120,
             1180, 1260, 1390, 1620,
-          ]),
-          sample([
+          ],
+          [
             980, 1040, 1080, 1120, 1160, 1200, 1240, 1280, 1320, 1360, 1420, 1480, 1560, 1660,
             1780, 1940, 2160, 2480,
-          ]),
-          sample([
+          ],
+          [
             1120, 1180, 1240, 1290, 1340, 1380, 1420, 1470, 1520, 1580, 1650, 1740, 1860, 2020,
             2240, 2560, 2980,
-          ]),
-          sample([
+          ],
+          [
             1980, 2140, 2280, 2410, 2530, 2660, 2790, 2930, 3080, 3260, 3480, 3760, 4120, 4580,
             5180, 5960, 6840,
-          ]),
+          ],
         ],
       },
     ],
@@ -72,11 +68,10 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { ViolinChart } from '@chartcraft/vue';
-import type { DataValue, TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const sample = (values: number[]): DataValue => values as unknown as DataValue;
-
-const options: TypedChartOptions = {
+// A violin category is a RAW number[] of samples — no cast needed.
+const options: ChartSpec = {
   title: 'Page load time by device class',
   subtitle: 'Largest contentful paint, real-user samples (ms)',
   violin: { bandwidth: 'auto', showBox: true },
@@ -87,22 +82,22 @@ const options: TypedChartOptions = {
         id: 'lcp',
         name: 'LCP',
         data: [
-          sample([
+          [
             740, 780, 810, 830, 860, 880, 890, 910, 920, 940, 960, 980, 1010, 1040, 1080, 1120,
             1180, 1260, 1390, 1620,
-          ]),
-          sample([
+          ],
+          [
             980, 1040, 1080, 1120, 1160, 1200, 1240, 1280, 1320, 1360, 1420, 1480, 1560, 1660,
             1780, 1940, 2160, 2480,
-          ]),
-          sample([
+          ],
+          [
             1120, 1180, 1240, 1290, 1340, 1380, 1420, 1470, 1520, 1580, 1650, 1740, 1860, 2020,
             2240, 2560, 2980,
-          ]),
-          sample([
+          ],
+          [
             1980, 2140, 2280, 2410, 2530, 2660, 2790, 2930, 3080, 3260, 3480, 3760, 4120, 4580,
             5180, 5960, 6840,
-          ]),
+          ],
         ],
       },
     ],
@@ -126,8 +121,8 @@ const options: TypedChartOptions = {
 
 - **Raw samples are read from your RAW data**, and any numeric-array entry (any
   length) is treated as a sample — the same rule as the boxplot. The `DataValue`
-  union only names the 2/3/5-element tuple shapes, so TypeScript needs the one
-  assertion shown above for longer arrays.
+  union names the per-category sample list alongside the tuple shapes, so a
+  `number[][]` typechecks with **no assertion**.
 - **Bands are addressed positionally:** `data[i]` is the sample for
   `categories[i]`. A folded sample array would otherwise produce a meaningless
   `x`, so the type never consults it — which is also why the tooltip header, the

@@ -24,10 +24,12 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
   gauge: {
     min: 0, // default 0
     max: 100, // default 100
+    // No colours: the bands are themed by POSITION — theme.up, theme.warning,
+    // theme.down. See the note below.
     bands: [
-      { to: 60, color: '#0ca30c' }, // healthy
-      { to: 85, color: '#c98500' }, // elevated
-      { to: 100, color: '#d03b3b' }, // saturated
+      { to: 60 }, // healthy
+      { to: 85 }, // elevated
+      { to: 100 }, // saturated
     ],
   },
   data: {
@@ -43,18 +45,19 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { GaugeChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'API cluster utilization',
   subtitle: '% of provisioned capacity, 5-min average',
   gauge: {
     min: 0, // default 0
     max: 100, // default 100
+    // No colours: the bands are themed by POSITION. See the note below.
     bands: [
-      { to: 60, color: '#0ca30c' }, // healthy
-      { to: 85, color: '#c98500' }, // elevated
-      { to: 100, color: '#d03b3b' }, // saturated
+      { to: 60 }, // healthy
+      { to: 85 }, // elevated
+      { to: 100 }, // saturated
     ],
   },
   data: {
@@ -80,6 +83,39 @@ track. With bands, the track shows the band colors at 0.35 alpha and the
 value arc overlays them at full alpha in the color of the band the value
 falls in (values beyond the last band use the last band's color; track range
 beyond the last band falls back to the gridline color). Band colors are
-**status** colors — pick them for meaning, never from the series palette.
-There is no legend on a gauge.
+**status** colors — never series-palette colors. There is no legend on a gauge.
+:::
+
+## Band colors are optional {#band-colors}
+
+`bands[].color` is **optional**. Omit it and the band takes the themed status
+color for its **position**, so a gauge needs no hardcoded hexes at all:
+
+| bands | defaults |
+|---|---|
+| 1 | `theme.neutral` — a single band states no comparison, it is just a track |
+| 2 | `theme.up`, `theme.down` |
+| 3 | `theme.up`, `theme.warning`, `theme.down` |
+| n | `theme.up`, `theme.warning` × (n−2), `theme.down` |
+
+`theme.warning` (`#fab219`, both schemes) is the [v0.4 caution
+step](../concepts/theming.md#warning-slot) that made this possible: before it,
+`up`/`down` covered two of the three states a gauge actually has, so the middle
+band forced a literal like `'#c98500'` — which is not even a status color, it is
+dark-mode series slot 4, and it stopped following the theme the moment the user
+switched schemes.
+
+Defaults are filled in **per band**, so a mix is legal and a named color is never
+overwritten:
+
+```ts
+gauge: { bands: [{ to: 60 }, { to: 85 }, { to: 100, color: brandRed }] }
+```
+
+::: warning The polarity assumption
+Bands are *ascending value ranges*, and the defaults read them as ascending
+**severity** — low is good, high is bad. That is the convention for the
+utilization, capacity, load and error-rate gauges this default exists for. A gauge
+whose polarity runs the other way (uptime, SLA attainment, test coverage) must
+name its colors: the library cannot infer which direction is "bad" from a number.
 :::

@@ -54,16 +54,41 @@ interface Theme {
   up: string;                 // financial rise / waterfall increase ('#0ca30c' both modes)
   down: string;               // financial fall / waterfall decrease ('#d03b3b' both modes)
   neutral: string;            // waterfall totals & neutral marks ('#52514e' light, '#c3c2b7' dark)
+  // v0.4 status color — OPTIONAL
+  warning?: string;           // the caution step between up and down ('#fab219' both modes)
 }
 ```
 
-The v0.2 `up` / `down` / `neutral` entries are **status colors**, used by
-candlestick/OHLC bodies and waterfall bars. They are deliberately separate
-from the 8 series slots: status colors carry meaning (rise/fall/total) and
-never impersonate a series identity — and vice versa. If you brand them,
-keep the rise/fall pair distinguishable for colorblind readers (the marks'
-geometry — body direction, tick sides, bar direction — always carries the
-information redundantly).
+The `up` / `down` / `neutral` / `warning` entries are **status colors**, used by
+candlestick/OHLC bodies, waterfall bars and gauge bands. They are deliberately
+separate from the 8 series slots: status colors carry meaning
+(rise/fall/caution/total) and never impersonate a series identity — and vice
+versa. They are also identical in both schemes, because a status color carries a
+*meaning*: shifting its hue between light and dark would make the same band read
+as a different state on a different desktop. If you brand them, keep the rise/fall
+pair distinguishable for colorblind readers (the marks' geometry — body direction,
+tick sides, bar direction — always carries the information redundantly).
+
+### The `warning` slot, and why it is optional {#warning-slot}
+
+`up`/`down` covered two of the three states a status mark actually has. The
+middle one — a gauge's caution band, a threshold being approached, an "at risk"
+marker — forced every consumer to hardcode a hex, which is the theming system
+being defeated one gauge at a time. `theme.warning` is that step: `#fab219`, from
+the validated status palette, in both schemes.
+
+It is the **one optional slot** on `Theme`, and deliberately so: `Theme` is a type
+consumers *construct*, so making it required would have broken every hand-written
+custom theme on upgrade, with the compile error landing in the caller's code. A
+complete custom theme written against 0.3.0 therefore still compiles **and still
+gets a themed caution color** — both built-in themes set it, a partial custom
+theme has it filled in when the theme is resolved, and the single internal
+resolution point falls back to the same validated `#fab219`, so nothing
+downstream ever handles `undefined`.
+
+Its first consumer is [`gauge.bands`](../examples/gauge.md), whose `color` became
+optional in the same release: omit the colours and a three-band gauge is themed
+`up` / `warning` / `down` by position.
 
 The built-in themes and palettes are exported:
 
@@ -72,8 +97,12 @@ import {
   lightTheme, darkTheme,        // Theme
   categoricalPalette,           // { light: string[]; dark: string[] } — 8 slots each
   sequentialPalette,            // string[] — blue ramp, light → dark
+  sequentialRampFor,            // (scheme) => string[] — the ramp oriented for a surface
 } from '@chartcraft/core';
 ```
+
+(Each framework wrapper re-exports all five under the same names, so a themed
+app needs only the one package.)
 
 Text always wears the ink colors — legend labels, tooltip values, and axis
 text are never tinted in a series color. The colored swatch or mark next to
@@ -160,6 +189,7 @@ const brandTheme: Theme = {
     '#0d5fc4', '#d95a1e', '#0f9d63', '#c78a00',
     '#c4568c', '#1f7a1f', '#5b49c9', '#c43d3c',
   ],
+  warning: '#b8860b',                  // optional; omit it to keep '#fab219'
 };
 
 createChart(el, { type: 'area', data, theme: brandTheme });

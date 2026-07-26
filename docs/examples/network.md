@@ -85,9 +85,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { NetworkChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Service dependency graph',
   subtitle: 'Node area ∝ requests per second · color = tier',
   network: { linkDistance: 46, charge: -260, iterations: 320, fixedSeed: 1 },

@@ -50,9 +50,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { ParallelChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Plan profiles across five metrics',
   subtitle: 'Each axis is scaled to its own range — read the crossings, not the heights',
   parallel: { axes: ['ARR ($k)', 'Seats', 'Weekly active %', 'NPS', 'Churn %'] },

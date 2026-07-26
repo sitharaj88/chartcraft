@@ -70,7 +70,7 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { CalendarChart } from '@chartcraft/vue';
-import type { DataValue, TypedChartOptions } from '@chartcraft/vue';
+import type { DataValue, ChartSpec } from '@chartcraft/vue';
 
 function deployDays(): DataValue[] {
   const out: DataValue[] = [];
@@ -93,7 +93,7 @@ function deployDays(): DataValue[] {
   return out;
 }
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Production deploys per day',
   subtitle: 'January – June 2026 (UTC)',
   calendar: {

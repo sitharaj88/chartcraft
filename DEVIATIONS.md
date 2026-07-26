@@ -30,6 +30,7 @@ asked for exist now, and `packages/core/src/charts/AUTHORING.md` documents them.
 | 94 | Quality-audit finding accepted as documented behaviour |
 | 95–105 | Quality-audit escalations: the architect's rulings |
 | 106 | Touch interaction |
+| 107–110 | v0.4.0 dogfooding: what five real dashboards found |
 
 ---
 
@@ -1609,6 +1610,13 @@ asserted was deliberately changed:
   agree — entry 18;
 - two annotation a11y assertions follow the single description node — entry 17.
 
+v0.4.0 adapted exactly one more: `v03.viewport.test.ts > new data resets an
+active zoom` asserted "No zoom event on reset-by-data", which encoded half of a
+defect — an app's Reset-zoom affordance is driven by the `zoom` event, so a
+silent reset left that button visible pointing at nothing. The reset itself is
+unchanged (an x extent of 0…100 becoming 0…10 genuinely invalidates a [20, 60]
+window); it is now announced, and the test asserts the event — entry 108.
+
 ## 92. Animation of an INITIAL mount cannot be asserted under jsdom
 
 jsdom's `requestAnimationFrame` hands its callback a timestamp that does not
@@ -1973,6 +1981,179 @@ Two further consequences worth stating rather than discovering:
   drag**, because the zoom decorator suppresses hover while a gesture runs. It
   is cleared the moment the gesture applies a viewport; a drag too short to zoom
   is a tap, and keeping it is then the correct outcome.
+
+---
+
+# v0.4.0 dogfooding: what five real dashboards found
+
+Five sample dashboards built against the PUBLISHED 0.3.0 packages surfaced four
+defects that 1,984 core tests did not, because the tests exercise the API and an
+app exercises the EXPERIENCE. All four are recorded here because all four changed
+documented behaviour.
+
+## 107. A log value axis derives its domain from the POSITIVE data only
+
+**Reported:** a `boxplot` of all-positive contract values (~1.2 … 260) with
+`yAxis: { type: 'log' }` produced an axis spanning roughly 1e-12 … 1e3, squashing
+every box into the top tenth of the plot; only an explicit `min` made it usable.
+
+**Root cause** — not, as reported, zero anchoring. `boxplot.extendValueDomain`
+rounds its whisker/outlier extent outward with `LinearScale.nice(5)`, and on a
+linear axis rounding a floor DOWN THROUGH ZERO is correct and desirable: 1.2 … 260
+became **0 … 300**. That 0 was unioned into `model.yDomain`, and `LogScale.domain`
+clamped it to its `1e-12` epsilon — twelve empty decades, then `nice()` to 1e3.
+The reporter's instinct (a 0 reached the log scale and was clamped) was right; the
+contributor was a type's own linear rounding convention, and zero anchoring,
+`extendValueDomain` and a stack floor are three more paths to the same 0.
+
+**Fixed as a property of the AXIS, in one place per stage** rather than per type:
+
+- `DataModel.valueAxisLog` is resolved once in `buildModel`, from the registry's
+  `valueAxisOf` (so a horizontal bar chart's `xAxis: { type: 'log' }` counts and a
+  vertical one's does not).
+- `valueExtentOf` skips zero anchoring, widens a degenerate domain by a decade
+  either side instead of down to zero, and reads a stacked series' cumulative TOPS
+  instead of its zero stack floor.
+- `applyDomainExtensions` discards a non-positive bound from a type's
+  `extendValueDomain` and from a decorator's `extendYDomain` — union, but only of
+  representable bounds.
+- `scales/index.ts#niceValueDomain(lo, hi, log)` is the ONE shared widening
+  helper; `boxplot`, `violin` and `candlestick`/`ohlc` call it with
+  `model.valueAxisLog` instead of each building a `LinearScale`. `waterfall` is
+  deliberately untouched: its baseline is zero by definition, and the pipeline
+  guard discards that floor on a log axis.
+- `layout.ts#makeValueScale` is the last line of defence, for the bounds a CALLER
+  can still inject: an explicit non-positive `min`/`max` or a viewport edge below
+  zero is DISCARDED (not clamped) and the data-derived bound stands in.
+- `LogScale.LOG_EPSILON` is now named and documented as a render-time clamp for an
+  out-of-domain VALUE, never a domain policy. `positiveLogDomain` is the domain
+  policy.
+
+**Non-positive DATA on a log axis is DROPPED, not rejected.** The value becomes
+`null` — the pipeline's existing single representation of "no value here", which
+`NaN`/`±Infinity` already fold to — so it is a gap in the line, absent from the
+domain, and `—` in the accessible table and in `exportData()`. One `console.warn`
+per chart instance names the two ways out. Rationale: the library throws for
+STRUCTURAL impossibilities (`pyramid` without two series, a cyclic `sankey`)
+because there is then nothing to draw at all; one non-positive row among a
+thousand is not that, and a dashboard switching a linear axis to log must not go
+blank. A log axis with no positive value at all shows one empty decade (1 … 10).
+
+**Known limit:** the drop rule operates on NORMALIZED points, so the types that
+read raw series data themselves (`boxplot`/`violin` samples, OHLC entries) still
+compute their summaries from every sample. Their non-positive contribution is
+discarded at the extension boundary instead of at ingest, so the axis is right;
+a boxplot whose whisker reaches ≤ 0 on a log axis draws that whisker outside the
+plot, where the type's own `clipRect` removes it.
+
+**Also:** a log DATA (x) axis gets the same guarantee — non-positive x positions
+are excluded from `continuousXExtentOf` (no extra pass: the exclusion rides the
+loop already reading `xv`) and `positiveLogDomain` guards the x scale.
+
+## 108. An `update()` preserves the zoom viewport unless the new DATA invalidates it
+
+**Reported (by all five samples, documented in two):** every wrapper re-sends the
+whole `options` object on any change — that is what React's, Vue's, Svelte's and
+Angular's reactivity models hand them — and core reset the viewport whenever an
+update merely CONTAINED `data`. So through any wrapper a pure theme change threw
+away the user's brush-zoom, and did it without emitting `zoom`, leaving an app's
+Reset-zoom button visible and pointing at nothing.
+
+**The discriminator is the DOMAIN, not the payload's keys.** A viewport is a
+window onto a domain, so:
+
+- the chart `type` and the x-axis KIND must be unchanged (both re-interpret the
+  numbers themselves — epoch ms vs a bare index vs a band position);
+- an `x` window requires an unchanged `xDomain`; a `y` window requires an
+  unchanged `yDomain`. Per axis, because they are independent: a dashboard
+  appending new VALUES on the same timestamps keeps its x-zoom, and the default
+  `zoom.axis` is `'x'`, so the common case never consults the value extent.
+
+**Sound:** the two extents are computed by `buildModel` from the points it just
+normalized, and the caller's `data` was deep-cloned on ingest, so reference
+equality is unavailable and equal numbers mean the data genuinely occupies the
+same domain. The trial model is built under the CURRENT viewport, so the
+comparison is like-for-like even when a window is narrowing the drawn points: both
+extents then describe the window, and they differ exactly when the new data no
+longer fills it (a window the new data does not reach becomes an empty slice,
+whose extent always differs). A change that moves neither extent leaves every
+scale and pixel mapping inside the window identical.
+
+**Cheap:** four number comparisons on values the layout already needed. No second
+pass over the data, no fingerprint to hash — the check costs the same on
+1,000,000 points as on 10. Only a genuine reset pays for a second model, and it
+pays through `rewindowModel` (re-slices retained points) rather than a re-ingest.
+
+**A reset now EMITS `zoom` (`null`)**, after the commit, so a handler sees the
+state the event describes. This is a behaviour change to a documented event and
+the reason test `v03.viewport.test.ts > new data resets an active zoom` was
+adapted (see 91): its "No zoom event on reset-by-data" comment encoded the second
+half of the defect.
+
+**Not covered:** the wrappers still cannot send a partial update, so a
+theme-only change still rebuilds the model (O(n) normalize) even though it
+changes nothing. That is a wrapper-side diffing question, not a core defect.
+
+## 109. `PointEvent` carries the colour of the mark that was clicked
+
+`TooltipPoint` had `color`; `PointEvent` did not, so a click-driven detail panel
+had to re-derive a swatch by finding the series index in
+`getOptions().data.series` and indexing `categoricalPalette[scheme]` — a
+reimplementation of the library's own palette logic that is also WRONG in two
+ways: palette slots follow series IDENTITY (stable across filtering and updates),
+not the series' current array index, and the per-mark types assign a slot per
+visible slice rather than per series.
+
+`PointEvent.color` is **required**, matching `TooltipPoint.color`: the pipeline
+always knows the colour of the mark it just hit, and an optional field would push
+a `?? fallback` back into every consumer — the defect this fixes. Handlers only
+READ a `PointEvent`, so this is source-compatible for them; **constructing** one
+(a test fixture, a synthetic event) now requires the field, and three wrapper
+bridge fixtures needed the line. That type-surface change is why this release is
+**0.4.0 and not 0.3.1** — architect's ruling, minor rather than patch.
+
+Both fields are
+resolved by one private helper (`chart.ts#markColor`), so a tooltip swatch and a
+click swatch cannot disagree: the DRAWN slice when the type has slice geometry and
+one visible series (pie/donut, rose, radialbar, sunburst take slots per mark in
+that shape), else a per-datum `color` override, else the series' slot via
+`seriesColor`. The single-visible-series guard is what makes a `pi` lookup
+unambiguous — `PieSlice` carries no series index — and those same types fall back
+to the series slot themselves once a second series is visible.
+
+## 110. `theme.warning`, and `gauge.bands[].color` is optional
+
+`Theme` exposed `up`/`down`/`neutral`, which covers two of the three states a
+status mark has, so a gauge's middle "warning" band forced every consumer to
+hardcode a hex — the theming system defeated one gauge at a time. `theme.warning`
+is the status palette's already-validated warning step, `#fab219`, identical in
+both schemes exactly as `up`/`down` are (a status colour carries a MEANING and
+must not shift hue with the surface). No existing theme value changed. Under
+`forced-colors: active` it collapses to `CanvasText` alongside `up`/`down`.
+
+**It is OPTIONAL (`warning?: string`), unlike `up`/`down`/`neutral`** — architect's
+ruling, and the right one: `Theme` is a type callers genuinely CONSTRUCT
+(`theme?: 'light' | 'dark' | 'auto' | Theme`, and `docs/concepts/theming.md`
+actively encourages custom themes), so a required field would break every
+hand-written theme on upgrade with the compile error landing in the caller's code.
+The optionality is invisible downstream because the fallback lives in exactly one
+place, `theme#warningColor`, alongside the single copy of the hex
+(`STATUS_WARNING`): both built-in themes carry the slot, `resolveTheme` completes
+it on a partial custom theme the same way it completes `series` (a spread would
+otherwise overwrite it with `undefined` when the key is present but unset), and
+`resolveGaugeBands` — the only consumer — resolves through the helper. So a
+complete custom theme predating the slot still compiles AND still gets a themed
+middle band. `up`/`down`/`neutral` stay required: they already were, and widening
+them would be a second breaking change for no benefit.
+
+`gauge.bands[].color` is now optional, filled in by position
+(`resolveGaugeBands`): one band `neutral`; two `up`, `down`; three or more `up`,
+`warning` × (n−2), `down`. Per band, so a partly-coloured list is legal. **The
+polarity is an assumption and is documented as one:** ascending value ranges are
+read as ascending SEVERITY, which is the convention for capacity, utilization,
+load and error-rate gauges. A gauge whose polarity runs the other way (uptime,
+SLA attainment, coverage) must name its colours — the library cannot infer which
+direction is "bad" from a number.
 
 ---
 

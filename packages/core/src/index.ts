@@ -41,6 +41,13 @@ export type {
   DataValue,
   DataPoint,
   TreeNode,
+  /**
+   * The raw per-category sample list behind `boxplot`/`violin` data. A named
+   * member of the `DataValue` union, exported for the same reason the graph
+   * payload types are: a consumer writing `const acv: SampleList[] = …` should
+   * not have to spell out `number[]` and hope it still matches ours.
+   */
+  SampleList,
   // Graph payload for `sankey` / `network` (the contract's `{ nodes, links }`).
   GraphData,
   GraphNodeInput,

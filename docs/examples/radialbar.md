@@ -43,9 +43,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { RadialbarChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Quota attainment by sales team',
   subtitle: 'Q3, percent of quota · full circle = 120%',
   radialbar: { innerRadius: 0.32, maxValue: 120, track: true },

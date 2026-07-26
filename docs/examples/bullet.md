@@ -56,9 +56,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { BulletChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Q3 KPI attainment vs plan',
   subtitle: 'Percent of quarterly plan · grey steps = below / on / above plan',
   bullet: { ranges: [70, 90, 115], target: 100 },

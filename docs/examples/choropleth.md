@@ -120,7 +120,7 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { ChoroplethChart } from '@chartcraft/vue';
-import type { GeoFeatureCollection, TypedChartOptions } from '@chartcraft/vue';
+import type { GeoFeatureCollection, ChartSpec } from '@chartcraft/vue';
 
 const territories: GeoFeatureCollection = {
   type: 'FeatureCollection',
@@ -175,7 +175,7 @@ const territories: GeoFeatureCollection = {
   ],
 };
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Revenue per territory',
   subtitle: 'Synthetic topology · $ thousands',
   choropleth: {

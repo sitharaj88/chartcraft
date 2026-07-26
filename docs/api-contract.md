@@ -156,6 +156,35 @@ per row (one `<tr>` per datum, rebuilt on every data change), so raising it to
 ```ts
 ```
 
+### `type: 'log'` — a log axis derives its domain from the positive data only
+
+`log10` is undefined at and below zero, so a log axis has no zero, no negative
+half and no "outward" direction toward either. Every stage that widens a value
+domain therefore behaves differently on one (v0.4.0):
+
+- **zero anchoring does not apply.** Bars and areas are measured from zero on a
+  linear axis; the bottom of a log plot is a decade, not zero.
+- **rounding is to whole DECADES**, not to nice linear multiples. A 1.2 … 260
+  extent becomes 1 … 1000 on a log axis and 0 … 300 on a linear one. This covers
+  every type that widens its own contribution (`boxplot`, `violin`,
+  `candlestick`/`ohlc`) and a stack's zero floor.
+- **a non-positive bound is discarded, never clamped.** That includes an explicit
+  `min`/`max` and a zoom viewport edge: the data-derived bound stands in instead.
+  (Clamping a 0 floor to a tiny epsilon is what produced a 1e-12 … 1e3 axis with
+  every mark squashed into the top tenth of the plot.)
+- **a value ≤ 0 in the DATA is dropped**: it becomes a gap — `null`, the same
+  representation `NaN`/`±Infinity` already fold to — is excluded from the domain,
+  and is listed as "no value" in the accessible table and in `exportData()`. The
+  chart says so **once** on the console, naming the two ways out (a linear axis,
+  or shifting the data into positive territory). It is not an error: the library
+  throws for STRUCTURAL impossibilities (a `pyramid` without two series, a cyclic
+  `sankey`) because there is nothing to draw at all, and one non-positive row is
+  not that — a live dashboard must not go blank when a linear axis is switched to
+  log. A log axis with no positive data at all shows one empty decade.
+
+The same guarantee applies to a log **data** (x) axis: non-positive x positions
+are excluded from its extent.
+
 ## Events
 
 ```ts
@@ -171,10 +200,27 @@ interface PointEvent {
   seriesId: string; seriesName: string;
   dataIndex: number;
   x: number | Date | string | null; y: number | null;
+  color: string;                      // v0.4.0 — the colour of the MARK, as drawn
   clientX: number; clientY: number;   // -1 for keyboard-originated events
   native: Event | null;
 }
 ```
+
+`PointEvent.color` (v0.4.0) is resolved by the same code path as
+`TooltipPoint.color`, so a click swatch and a tooltip swatch can never disagree:
+a per-datum `color` override wins, then the mark's own palette slot for the types
+that assign one per mark (`pie`/`donut`, `rose`, `radialbar`, `sunburst`), then
+the series' slot. It exists so a detail panel never has to re-derive it —
+re-derivation is not merely tedious but wrong, because palette slots follow
+series **identity** (stable across filtering and updates), not the series' index
+in `data.series`.
+
+`color` is **required**, matching `TooltipPoint.color`: the pipeline always knows
+the colour of the mark it just hit, and an optional field would put a `?.` on the
+common read path forever to accommodate a rare mock. Handlers only ever READ a
+`PointEvent`, so this is source-compatible for them — but **constructing** one (a
+test fixture, a synthetic event, a mock chart) now requires the field, which is
+why the release carrying it is a minor and not a patch.
 
 ## Theme shape
 
@@ -190,6 +236,8 @@ interface Theme {
   series: string[];           // 8 categorical slots, validated order — never re-sort
   fontFamily: string;         // default: system-ui, -apple-system, "Segoe UI", sans-serif
   fontSize: number;           // base px, default 12
+  // status colours (v0.2 / v0.4.0) — see the v0.2 Theme block below.
+  up: string; down: string; neutral: string; warning?: string;
 }
 ```
 
@@ -205,6 +253,13 @@ interface Theme {
 | 6 | `#008300` | `#008300` | | axisLine | `#c3c2b7` | `#383835` |
 | 7 | `#4a3aa7` | `#9085e9` | | | | |
 | 8 | `#e34948` | `#e66767` | | | | |
+
+Status colours (identical in both schemes — a status colour carries a meaning, so
+it must not shift hue with the surface): `up` `#0ca30c`, `warning` `#fab219`,
+`down` `#d03b3b`. `neutral` is chrome, not status: `#52514e` light, `#c3c2b7`
+dark. A status colour never impersonates a categorical slot. `warning` is the one
+**optional** slot on `Theme` (see the v0.2 Theme block): a theme that omits it
+resolves to `#fab219`.
 
 Sequential ramp (as written, light→dark): `#cde2fb #b7d3f6 #9ec5f4 #86b6ef #6da7ec #5598e7 #3987e5 #2a78d6 #256abf #1c5cab #184f95 #104281 #0d366b`
 
@@ -242,7 +297,7 @@ anything is painted, and `theme.forcedColors` is set:
 | `textPrimary` / `textSecondary` / `axisLine` | `CanvasText` |
 | `textMuted` / `gridline` / `neutral` | `GrayText` |
 | `series` | `CanvasText`, `LinkText`, `Highlight` (3 slots) |
-| `up` / `down` | `CanvasText` |
+| `up` / `down` / `warning` | `CanvasText` |
 
 This is a **user** preference, so it overrides `theme: 'dark'` and a fully custom
 `Theme` object alike, and it is watched live for the chart's whole lifetime (a
@@ -347,7 +402,12 @@ interface ChartOptions {
     // default ramp: sequentialPalette, DIRECTED by theme.colorScheme (light: low=lightest,
     // high=darkest; dark: reversed). A supplied ramp is used verbatim in both schemes.
   gauge?: { min?: number; max?: number;         // default 0..100
-            bands?: { to: number; color: string }[] };  // optional colored ranges
+            bands?: { to: number; color?: string }[] };  // v0.4.0: color is OPTIONAL —
+    // a band with none takes the themed status default for its POSITION: first band
+    // theme.up, last theme.down, every band between them theme.warning (a lone band
+    // is theme.neutral). The default reads ascending value ranges as ascending
+    // SEVERITY (low good, high bad — capacity/utilization/error-rate gauges); a gauge
+    // whose polarity runs the other way must name its colours.
   waterfall?: { connectors?: boolean };         // hairline connectors between bars, default true
 }
 
@@ -356,6 +416,18 @@ interface Theme {
   up: string;    // financial rise / waterfall increase.  light '#0ca30c', dark '#0ca30c'
   down: string;  // financial fall / waterfall decrease.  light '#d03b3b', dark '#d03b3b'
   neutral: string; // waterfall totals & neutral marks.    light '#52514e', dark '#c3c2b7'
+  warning?: string; // v0.4.0 — the CAUTION step between up and down (a gauge's middle
+                    // band, a threshold approaching). light '#fab219', dark '#fab219':
+                    // the status palette's validated warning step. Identical in both
+                    // schemes, exactly as up/down are — a status colour carries a
+                    // MEANING and must not shift hue between light and dark.
+                    // OPTIONAL, unlike its siblings: `Theme` is a type callers
+                    // CONSTRUCT, so a custom theme written before this slot existed
+                    // must keep compiling. Absent, it resolves to the same validated
+                    // value in ONE place (`theme#warningColor`), so a gauge band still
+                    // themes and no consumer ever handles `undefined`. `resolveTheme`
+                    // completes it on a partial custom theme, exactly as it does
+                    // `series`.
   forcedColors?: boolean; // set BY THE PIPELINE when `forced-colors: active`; every color above
                           // is then a CSS system-color keyword. Never set by a caller.
 }
@@ -574,6 +646,17 @@ interface Chart {
    a `zoom` event `{ x?: [number, number]; y?: [number, number] } | null`.
    Downsampling re-runs against the visible window, so zooming into 1M points
    reveals real detail.
+
+   **An `update()` preserves the viewport unless the new data makes it
+   meaningless** (v0.4.0). The discriminator is the DOMAIN, not which keys the
+   payload happened to carry: the chart type and the x-axis kind must be
+   unchanged, an `x` window requires an unchanged x extent and a `y` window an
+   unchanged value extent. So a theme change, an equivalent re-send, or new
+   values on the same timestamps all keep the window, while a range switch or a
+   type change resets it. **A reset always emits the `zoom` event (`null`)**, so
+   an app's Reset-zoom affordance can never disagree with the actual state.
+   This matters most through the wrappers, which re-send the whole `options`
+   object — including `data` — on any change.
 6. **Export** — `exportImage()` renders at `scale` (default 2) onto an
    offscreen surface and resolves a `Blob`; `'svg'` re-renders through the SVG
    renderer path if available, else rejects with a clear error. `exportData()`

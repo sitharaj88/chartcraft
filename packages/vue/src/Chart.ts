@@ -29,8 +29,29 @@ import type {
 /** The live chart instance type (core's `Chart` interface, renamed to avoid colliding with the `Chart` component). */
 export type ChartInstance = CoreChart;
 
-/** Options for the per-type convenience components (`type` is injected). */
-export type TypedChartOptions = Omit<ChartOptions, 'type'>;
+/**
+ * A chart's options with no `type` — the shape for holding chart configuration
+ * in its own module (`specs.ts`) and binding it to the matching per-type
+ * component. Identical in every ChartCraft wrapper (`@chartcraft/react`,
+ * `@chartcraft/vue`, `@chartcraft/svelte`, `@chartcraft/angular`).
+ *
+ * ```ts
+ * // specs.ts
+ * import type { ChartSpec } from '@chartcraft/vue';
+ * export const revenue: ChartSpec = { title: 'Revenue', data: { ... } };
+ * ```
+ * ```vue
+ * <BarChart :options="revenue" />
+ * ```
+ */
+export type ChartSpec = Omit<ChartOptions, 'type'>;
+
+/**
+ * @deprecated Since 0.3.1 — use {@link ChartSpec}, which is the same type under
+ * the name every ChartCraft wrapper now shares. Kept as an alias so 0.3.0 code
+ * keeps compiling; it will be removed in 1.0.
+ */
+export type TypedChartOptions = ChartSpec;
 
 /** Shape exposed to template refs: `chartRef.value.chart` is the ChartInstance (or null before mount). */
 export interface ChartExposed {
@@ -98,7 +119,7 @@ function typedChart(type: ChartType, name: string) {
   return defineComponent({
     name,
     props: {
-      options: { type: Object as PropType<TypedChartOptions>, required: true },
+      options: { type: Object as PropType<ChartSpec>, required: true },
     },
     emits: chartEmits,
     setup(props, { emit, expose }) {

@@ -125,9 +125,9 @@ conventions:
   just `number[]` — the raw samples, binned by the chart. A boxplot or violin
   category is either a 5-number object
   (`{ min, q1, median, q3, max, outliers? }`, boxplot only) or a raw `number[]`,
-  summarized by the chart. **Raw per-category arrays still need a TypeScript
-  assertion** (`values as unknown as DataValue`): the union names only the
-  2/3/5-element tuple shapes.
+  summarized by the chart. Since v0.3 the `DataValue` union names the
+  per-category sample list explicitly, so a `number[][]` **needs no cast** — if you
+  have older code carrying `values as unknown as DataValue`, delete it.
 
 Waterfall points add `isTotal: true` to mark absolute totals among deltas.
 Full field-by-field semantics: [`DataPoint`](../api/core.md#datapoint) in the

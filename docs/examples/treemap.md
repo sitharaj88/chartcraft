@@ -17,7 +17,7 @@ than areas) or for values that can be negative.
 
 ```ts [Vanilla]
 import { createChart } from '@chartcraft/core';
-import type { DataValue, TreeNode } from '@chartcraft/core';
+import type { TreeNode } from '@chartcraft/core';
 
 const nodes: TreeNode[] = [
   {
@@ -51,10 +51,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
   subtitle: 'FY2026 ($M) — cell area = revenue',
   data: {
     series: [
-      // TreeNode[] needs a cast: the DataValue union doesn't name TreeNode
-      // (the runtime reads the nodes as-is). Alternatively pass the value
-      // as `y`: { label: 'Other', y: 3.6 }.
-      { id: 'revenue', name: 'Revenue', data: nodes as unknown as DataValue[] },
+      // No cast needed: `DataPoint` declares `value`, so a genuine
+      // `TreeNode[]` is assignable to `DataValue[]` directly.
+      { id: 'revenue', name: 'Revenue', data: nodes },
     ],
   },
   a11y: {
@@ -67,7 +66,7 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { TreemapChart } from '@chartcraft/vue';
-import type { DataValue, TreeNode, TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec, TreeNode } from '@chartcraft/vue';
 
 const nodes: TreeNode[] = [
   {
@@ -95,15 +94,14 @@ const nodes: TreeNode[] = [
   { label: 'Other', value: 3.6 },
 ];
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Revenue by product line',
   subtitle: 'FY2026 ($M) — cell area = revenue',
   data: {
     series: [
-      // TreeNode[] needs a cast: the DataValue union doesn't name TreeNode
-      // (the runtime reads the nodes as-is). Alternatively pass the value
-      // as `y`: { label: 'Other', y: 3.6 }.
-      { id: 'revenue', name: 'Revenue', data: nodes as unknown as DataValue[] },
+      // No cast needed: `DataPoint` declares `value`, so a genuine
+      // `TreeNode[]` is assignable to `DataValue[]` directly.
+      { id: 'revenue', name: 'Revenue', data: nodes },
     ],
   },
   a11y: {

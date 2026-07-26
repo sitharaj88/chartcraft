@@ -1,6 +1,6 @@
 {
   "name": "@chartcraft/angular",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "ChartCraft Angular wrapper — standalone, signal-based lifecycle/event bridge around @chartcraft/core",
   "license": "MIT",
   "author": {
@@ -24,7 +24,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@chartcraft/core": "0.3.0"
+    "@chartcraft/core": "0.4.0"
   },
   "peerDependencies": {
     "@angular/core": ">=20.0.0",

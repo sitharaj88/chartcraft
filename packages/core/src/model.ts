@@ -35,7 +35,7 @@ import {
 } from './data/normalize';
 import { extendYDomainForDecorators, normalizeViewport, type Viewport } from './decorate';
 import { computeStacks, stackExtent } from './data/stack';
-import { getChartType, type ChartTypeDefinition } from './charts/registry';
+import { getChartType, valueAxisOf, type ChartTypeDefinition } from './charts/registry';
 import { registerBuiltinChartTypes } from './charts';
 import type { MarkerShape } from './charts/markers';
 import { resolveTableMaxRows } from './a11y';
@@ -331,6 +331,18 @@ export interface DataModel {
    */
   valueDomainExact: boolean;
   /**
+   * v0.4.0 — the axis that carries VALUES for this type is logarithmic
+   * (`yAxis.type: 'log'`, or `xAxis.type` on a horizontal arrangement).
+   *
+   * Every stage that widens the value domain has to know, because the two axis
+   * kinds round in incompatible directions: a linear axis anchors bars/areas at
+   * zero and rounds a floor outward THROUGH zero, and a log axis has no zero at
+   * all. Resolved once here (from the registry's `valueAxisOf`, not from a
+   * `horizontal` guess) so `valueExtentOf`, `applyDomainExtensions` and every
+   * type's `extendValueDomain` agree on the answer.
+   */
+  valueAxisLog: boolean;
+  /**
    * v0.3 — a datum's category band is its POINT INDEX, never its `x`
    * (`ChartTypeNeeds.bandIndex: 'position'`). `bandIndexFor` obeys it.
    */
@@ -433,6 +445,75 @@ function warnPaletteOverflow(
   );
 }
 
+/**
+ * ONE warning per chart instance when a log value axis had to drop data.
+ * Keyed on the instance's `paletteSlots` map, exactly as `overflowWarned` is.
+ */
+const logDropWarned = new WeakSet<Map<string, number>>();
+
+/**
+ * THE LOG-AXIS DATA RULE (v0.4.0).
+ *
+ * `log10(v)` is undefined for `v <= 0`: a zero or negative value has no
+ * position on a log axis, at any zoom, under any domain. So the value is
+ * dropped — folded to `null`, which is already the pipeline's single
+ * representation of "no value here" (`data/normalize.ts#value` folds `NaN` and
+ * `±Infinity` the same way, for the same reason: one code path for gaps in
+ * lines, skipped marks, `—` in the a11y table and in `exportData()`, and an
+ * untouched value domain).
+ *
+ * DROP, NOT THROW. The library throws for STRUCTURAL impossibilities — pyramid
+ * demands two series, sankey rejects a cycle — because there is no chart to
+ * draw at all. A single non-positive datum is not that: the other 999 points
+ * are perfectly plottable, and a live dashboard that switches a linear axis to
+ * log must not go blank because one row is zero. It is announced ONCE per chart
+ * instead, with the two ways out named.
+ *
+ * Returns the number of values dropped (0 when there were none, which is the
+ * overwhelmingly common case and allocates nothing).
+ */
+function dropNonPositiveForLog(seriesPoints: NormalizedPoint[][]): number {
+  let dropped = 0;
+  for (const pts of seriesPoints) {
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      if (!p) continue;
+      const badY = p.y !== null && p.y !== undefined && p.y <= 0;
+      const badLow = typeof p.low === 'number' && p.low <= 0;
+      const badHigh = typeof p.high === 'number' && p.high <= 0;
+      if (!badY && !badLow && !badHigh) continue;
+      if (badY) dropped++;
+      if (badLow) dropped++;
+      if (badHigh) dropped++;
+      pts[i] = {
+        ...p,
+        ...(badY ? { y: null } : {}),
+        ...(badLow ? { low: null } : {}),
+        ...(badHigh ? { high: null } : {}),
+      };
+    }
+  }
+  return dropped;
+}
+
+function warnLogDrop(
+  opts: ResolvedOptions,
+  paletteSlots: Map<string, number>,
+  dropped: number,
+): void {
+  if (logDropWarned.has(paletteSlots)) return;
+  logDropWarned.add(paletteSlots);
+  const named = opts.title ? `"${opts.title}" (${opts.type})` : `${opts.type}`;
+  // eslint-disable-next-line no-console
+  console.warn(
+    `@chartcraft/core: ${named} has a logarithmic value axis and ${dropped} ` +
+      `value${dropped === 1 ? '' : 's'} at or below zero. A log scale has no position for them ` +
+      `(log10 of a non-positive number is undefined), so they are drawn as GAPS and excluded ` +
+      `from the axis domain. Use a linear axis, or shift the data into positive territory, if ` +
+      `those values matter.`,
+  );
+}
+
 /** Kinds whose value axis is anchored at zero. */
 const ZERO_ANCHORED: readonly SeriesKind[] = ['bar', 'area'];
 /** Kinds eligible for LTTB downsampling. */
@@ -456,6 +537,11 @@ export function buildModel(
   const stacked = opts.stacked && (needs.stacking ?? false);
   const horizontal = opts.horizontal && (needs.horizontal ?? false);
   const viewport = normalizeViewport(viewportIn);
+  // Which axis carries VALUES is the registry's answer, never a `horizontal`
+  // guess (`valueAxisOf`), so a horizontal bar chart's `xAxis: { type: 'log' }`
+  // is recognized as a log VALUE axis and a vertical one's is not.
+  const valueAxisLog =
+    (needs.cartesianAxes ?? false) && valueAxisOf(needs, opts, horizontal).type === 'log';
 
   const rawCategories = opts.data.categories ?? null;
 
@@ -482,6 +568,13 @@ export function buildModel(
         pts.map((p) => (typeof p.x === 'string' ? { ...p, xv: idx.get(p.x) ?? p.xv } : p)),
       );
     }
+  }
+
+  // A log value axis cannot plot a value <= 0 — those become gaps (and say so
+  // once). Runs BEFORE the value extent, so a dropped value never reaches it.
+  if (valueAxisLog) {
+    const dropped = dropNonPositiveForLog(seriesPoints);
+    if (dropped > 0) warnLogDrop(opts, paletteSlots, dropped);
   }
 
   const sampleXs = seriesPoints.flatMap((pts) => pts.slice(0, 10).map((p) => p.x));
@@ -602,8 +695,8 @@ export function buildModel(
     }
   }
 
-  const yDomain = valueExtentOf(visible, stackExtents);
-  const xDomain = continuousX ? continuousXExtentOf(visible) : null;
+  const yDomain = valueExtentOf(visible, stackExtents, valueAxisLog);
+  const xDomain = continuousX ? continuousXExtentOf(visible, xType === 'log') : null;
   const maxLen = series.reduce((m, s) => Math.max(m, s.points.length), 0);
 
   const model: DataModel = {
@@ -616,6 +709,7 @@ export function buildModel(
     xDomain,
     yDomain,
     valueDomainExact: false,
+    valueAxisLog,
     bandByPosition: needs.bandIndex === 'position',
     maxLen,
     viewport,
@@ -635,34 +729,53 @@ export function buildModel(
  * The value extent over the visible series: stacked-group extents plus the raw
  * extents of every unstacked series, then the zero anchor and the degenerate
  * widening.
+ *
+ * `log` (v0.4.0) switches the two conventions that assume a linear axis. Both
+ * of them manufacture a NON-POSITIVE floor out of positive data, and a log
+ * scale can only clamp such a floor to an epsilon — twelve empty decades:
+ *
+ *  - the zero anchor. Bars and areas are measured from zero, which is a fact
+ *    about the MARK, but a log axis has no zero to anchor to (the bottom of a
+ *    log plot is not zero, it is whatever decade the domain starts at), so on
+ *    one the anchor simply does not apply.
+ *  - the degenerate widening, which pulls a single-value domain down to zero.
+ *    On a log axis it widens by a DECADE either side instead.
+ *  - a STACK's floor, which is zero by definition. A stacked series' own
+ *    cumulative TOPS are read instead, so the domain covers the marks that are
+ *    actually drawn rather than a baseline the axis cannot show.
  */
 function valueExtentOf(
   visible: readonly NormalizedSeries[],
   stackExtents: readonly [number, number][],
+  log = false,
 ): [number, number] {
   let min = Infinity;
   let max = -Infinity;
+  /** Fold one value into the extent; on a log axis, only if it is plottable. */
+  const take = (v: number): void => {
+    if (log && !(v > 0)) return;
+    if (v < min) min = v;
+    if (v > max) max = v;
+  };
   for (const s of visible) {
-    if (s.y1) continue; // covered by its stack extent
+    if (s.y1) {
+      // Normally covered by its stack extent — but that extent's floor is 0,
+      // which a log axis cannot carry, so read the cumulative tops directly.
+      if (log) for (const v of s.y1) if (typeof v === 'number') take(v);
+      continue;
+    }
     for (const p of s.points) {
       // v0.3: range bounds are values too (rangearea band, dumbbell endpoints,
       // bullet range). They are only ever set when the caller supplied them.
-      if (typeof p.low === 'number') {
-        if (p.low < min) min = p.low;
-        if (p.low > max) max = p.low;
-      }
-      if (typeof p.high === 'number') {
-        if (p.high < min) min = p.high;
-        if (p.high > max) max = p.high;
-      }
+      if (typeof p.low === 'number') take(p.low);
+      if (typeof p.high === 'number') take(p.high);
       if (p.y === null) continue;
-      if (p.y < min) min = p.y;
-      if (p.y > max) max = p.y;
+      take(p.y);
     }
   }
   for (const [lo, hi] of stackExtents) {
-    if (lo < min) min = lo;
-    if (hi > max) max = hi;
+    take(lo);
+    take(hi);
   }
   // Non-finite extents mean "no usable values" — either nothing was visible
   // (min/max never moved off ±Infinity) or a stacking/extension stage produced
@@ -670,39 +783,55 @@ function valueExtentOf(
   // this is the belt to that braces: an infinite value domain makes every scale
   // return NaN, which paints nothing and reports nothing.
   if (!Number.isFinite(min) || !Number.isFinite(max)) {
-    min = 0;
-    max = 1;
+    // A log axis has no usable [0, 1]: one decade is its empty-state domain.
+    min = log ? 1 : 0;
+    max = log ? 10 : 1;
   }
-  // Bars and areas are anchored at zero.
-  if (visible.some((s) => s.kind !== null && ZERO_ANCHORED.includes(s.kind))) {
+  // Bars and areas are anchored at zero — on a LINEAR axis only (see above).
+  if (!log && visible.some((s) => s.kind !== null && ZERO_ANCHORED.includes(s.kind))) {
     if (min > 0) min = 0;
     if (max < 0) max = 0;
   }
   if (min === max) {
-    // Degenerate: widen so scales/ticks stay sane.
-    min = min > 0 ? 0 : min - 1;
-    max = max <= 0 ? (max < 0 ? 0 : 1) : max + (max - min);
-    if (min === max) max = min + 1;
+    if (log) {
+      // Degenerate on a log axis: a decade either side of the single value.
+      const v = min > 0 ? min : 1;
+      min = v / 10;
+      max = v * 10;
+    } else {
+      // Degenerate: widen so scales/ticks stay sane.
+      min = min > 0 ? 0 : min - 1;
+      max = max <= 0 ? (max < 0 ? 0 : 1) : max + (max - min);
+      if (min === max) max = min + 1;
+    }
   }
   return [min, max];
 }
 
-/** The continuous x extent over the visible series' DRAWN points. */
-function continuousXExtentOf(visible: readonly NormalizedSeries[]): [number, number] {
+/**
+ * The continuous x extent over the visible series' DRAWN points.
+ *
+ * `log` (v0.4.0) excludes non-positive x POSITIONS, for the same reason the
+ * value extent excludes non-positive values: a log x axis whose floor is 0 or
+ * negative is clamped to an epsilon and becomes a decade ruler of empty space.
+ * No extra pass — the exclusion rides the loop that was already reading `xv`.
+ */
+function continuousXExtentOf(visible: readonly NormalizedSeries[], log = false): [number, number] {
   let xMin = Infinity;
   let xMax = -Infinity;
   for (const s of visible) {
     for (const p of s.points) {
       if (p.xv === null) continue;
+      if (log && p.xv <= 0) continue;
       if (p.xv < xMin) xMin = p.xv;
       if (p.xv > xMax) xMax = p.xv;
     }
   }
   if (!Number.isFinite(xMin)) {
-    xMin = 0;
-    xMax = 1;
+    xMin = log ? 1 : 0;
+    xMax = log ? 10 : 1;
   }
-  if (xMin === xMax) xMax = xMin + 1;
+  if (xMin === xMax) xMax = log ? xMin * 10 : xMin + 1;
   return [xMin, xMax];
 }
 
@@ -717,20 +846,30 @@ function continuousXExtentOf(visible: readonly NormalizedSeries[]): [number, num
  * in the y-domain"). With no decorator registered the second stage is a no-op.
  */
 function applyDomainExtensions(model: DataModel, opts: ResolvedOptions, def: ChartTypeDefinition): void {
+  // v0.4.0 — on a log value axis a non-positive bound is not a wider domain, it
+  // is an UNREPRESENTABLE one, so it is discarded rather than unioned in. Both
+  // extension stages are guarded, because both can produce one out of positive
+  // data: a type's own `nice()` rounding a floor down through zero (boxplot,
+  // violin, candlestick), a waterfall's always-zero baseline, an error bar whose
+  // interval reaches below zero.
+  const usable = (v: number): boolean => Number.isFinite(v) && (!model.valueAxisLog || v > 0);
+
   const typeExt = def.extendValueDomain?.(model, opts) ?? null;
   if (typeExt) {
     const ext = Array.isArray(typeExt) ? { domain: typeExt } : typeExt;
     const [a, b] = ext.domain;
     let [lo, hi] = model.yDomain;
-    if (Number.isFinite(a) && a < lo) lo = a;
-    if (Number.isFinite(b) && b > hi) hi = b;
+    if (usable(a) && a < lo) lo = a;
+    if (usable(b) && b > hi) hi = b;
     model.yDomain = [lo, hi];
     if (ext.exact === true) model.valueDomainExact = true;
   }
 
   const before = model.yDomain;
   const extended = extendYDomainForDecorators(before, model, opts);
-  if (extended[0] !== before[0] || extended[1] !== before[1]) model.yDomain = extended;
+  const lo = usable(extended[0]) ? extended[0] : before[0];
+  const hi = usable(extended[1]) ? extended[1] : before[1];
+  if (lo !== before[0] || hi !== before[1]) model.yDomain = [lo, hi];
 }
 
 /**
@@ -798,8 +937,8 @@ export function rewindowModel(
   const model: DataModel = {
     ...base,
     series,
-    yDomain: valueExtentOf(visible, []),
-    xDomain: continuousXExtentOf(visible),
+    yDomain: valueExtentOf(visible, [], base.valueAxisLog),
+    xDomain: continuousXExtentOf(visible, base.xType === 'log'),
     valueDomainExact: false,
     maxLen: series.reduce((m, s) => Math.max(m, s.points.length), 0),
     viewport,

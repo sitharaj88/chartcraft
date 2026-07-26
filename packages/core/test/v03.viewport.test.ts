@@ -196,15 +196,24 @@ describe('Chart.zoomTo', () => {
     expect(renders).toEqual(['update']);
   });
 
-  it('new data resets an active zoom (the window is in stale units)', () => {
+  /**
+   * v0.4.0 — ADAPTED. This test used to assert that reset-by-data emits NO
+   * `zoom` event ("No zoom event on reset-by-data"), which encoded half of the
+   * wrapper defect: an app's Reset-zoom affordance is driven by the `zoom`
+   * event, so a silent reset left that button visible pointing at nothing. The
+   * reset itself is unchanged — an x extent of 0…100 becoming 0…10 genuinely
+   * invalidates a [20, 60] window — but it is now announced.
+   */
+  it('new data resets an active zoom (stale units) AND emits the reset', () => {
     const events: unknown[] = [];
     const { chart } = mount(lineOpts);
     chart.zoomTo({ x: [20, 60] });
     chart.on('zoom', (ev) => events.push(ev));
     chart.setData({ series: [{ name: 'S', data: [[0, 1], [10, 2]] as [number, number][] }] });
-    // No zoom event on reset-by-data, but the next zoomTo(null) is a no-op reset.
-    chart.zoomTo(null);
     expect(events).toEqual([null]);
+    // And the viewport really is gone: the next zoomTo(null) is a no-op reset.
+    chart.zoomTo(null);
+    expect(events).toEqual([null, null]);
   });
 
   it('is a no-op after destroy', () => {

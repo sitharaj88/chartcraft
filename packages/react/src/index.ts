@@ -51,7 +51,52 @@ export {
   NetworkChart,
 } from './Chart';
 
-export type { ChartInstance, ChartProps, TypedChartProps, ChartEventProps } from './Chart';
+export type {
+  ChartInstance,
+  ChartProps,
+  TypedChartProps,
+  ChartEventProps,
+  /** Options-shaped spec type, spelled the same in all four wrappers. */
+  ChartSpec,
+} from './Chart';
+
+/*
+ * ---------------------------------------------------------------------------
+ * Core's runtime values, re-exported so `@chartcraft/react` is the only import
+ * an app needs (`@chartcraft/core` stays an implementation detail, not a second
+ * direct dependency).
+ *
+ * These are NAMED re-exports, never `export * from '@chartcraft/core'`: named
+ * re-exports let a bundler drop the ones a consumer does not mention, and core
+ * declares `sideEffects: false`, so nothing here is pulled in by merely
+ * importing a component. Importing `<LineChart>` does not bring in
+ * `downsampleLTTB` or the scale classes; importing `lightTheme` does not bring
+ * in `createChart` or React.
+ * ---------------------------------------------------------------------------
+ */
+
+/** The imperative escape hatch — create a chart without a React component. */
+export { createChart, version } from '@chartcraft/core';
+
+// Themes & palette.
+export {
+  lightTheme,
+  darkTheme,
+  categoricalPalette,
+  sequentialPalette,
+  sequentialRampFor,
+} from '@chartcraft/core';
+
+// Scale + data utilities (advanced: custom axes, pre-downsampling).
+export { LinearScale, TimeScale, BandScale, LogScale, downsampleLTTB } from '@chartcraft/core';
+
+// Decoration/overlay plumbing (advanced: custom decorators).
+export {
+  registerDecorator,
+  unregisterDecorator,
+  decorators,
+  clearDecorators,
+} from '@chartcraft/core';
 
 // Re-export all public core types (core's `Chart` is available as `ChartInstance` above).
 export type {
@@ -59,9 +104,15 @@ export type {
   ChartType,
   ChartData,
   SeriesOptions,
+  SeriesKind,
+  SeriesData,
   DataValue,
   DataPoint,
   TreeNode,
+  GraphData,
+  GraphNodeInput,
+  GraphLinkInput,
+  SampleList,
   AxisOptions,
   LegendOptions,
   TooltipOptions,

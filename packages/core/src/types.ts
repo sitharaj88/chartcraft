@@ -95,7 +95,13 @@ export interface ChartOptions {
   /** heatmap only. Default ramp: sequentialPalette; min/max default to data extent */
   heatmap?: { ramp?: string[]; min?: number; max?: number };
   /** gauge only. Default 0..100; optional colored ranges */
-  gauge?: { min?: number; max?: number; bands?: { to: number; color: string }[] };
+  /**
+   * `bands[].color` is OPTIONAL (v0.4.0): a band with no colour takes the themed
+   * status default for its POSITION — first band `theme.up`, last `theme.down`,
+   * every band between them `theme.warning` (a lone band is `theme.neutral`).
+   * See `charts/radial/gauge.ts#resolveGaugeBands` for the polarity assumption.
+   */
+  gauge?: { min?: number; max?: number; bands?: { to: number; color?: string }[] };
   /** waterfall only. Hairline connectors between bars, default true */
   waterfall?: { connectors?: boolean };
   // ---- v0.3 cross-cutting features -------------------------------------
@@ -489,6 +495,21 @@ export interface PointEvent {
   dataIndex: number;
   x: number | Date | string | null;
   y: number | null;
+  /**
+   * v0.4.0 — the colour of the MARK this event is about, resolved exactly as the
+   * chart drew it: a per-datum `color` override, else the mark's own palette slot
+   * for the types that assign one per mark (pie/donut, rose, radialbar,
+   * sunburst), else the series' palette slot.
+   *
+   * Present so a click-driven detail panel can show a swatch that MATCHES the
+   * chart without re-deriving it. Re-deriving is not merely tedious, it is
+   * wrong: palette slots follow series IDENTITY (stable across filtering and
+   * updates), not the series' current array index, and per-mark types assign
+   * slots per visible slice — so `palette[data.series.indexOf(s)]` silently
+   * drifts from what is on screen. `TooltipPoint.color` resolves through the
+   * same code path, so a tooltip swatch and a click swatch can never disagree.
+   */
+  color: string;
   /** -1 for keyboard-originated events */
   clientX: number;
   clientY: number;
@@ -522,6 +543,24 @@ export interface Theme {
   down: string;
   /** waterfall totals & neutral marks. light '#52514e', dark '#c3c2b7' */
   neutral: string;
+  /**
+   * v0.4.0 — the CAUTION step between `up` and `down`. light '#fab219', dark
+   * '#fab219' (the status palette's validated warning step, not a new colour).
+   *
+   * `up`/`down` covered two of the three states a status mark actually has, so
+   * the middle one — a gauge's warning band, a threshold approaching, an
+   * "at risk" marker — forced every consumer to hardcode a hex, which is exactly
+   * the theming system being defeated one gauge at a time.
+   *
+   * OPTIONAL, unlike its two siblings, because `Theme` is a type callers
+   * CONSTRUCT (`theme?: 'light' | 'dark' | 'auto' | Theme`): making it required
+   * would break every hand-written custom theme on upgrade, with the compile
+   * error landing in the caller's code. Both built-in themes set it, a partial
+   * custom theme has it completed by `resolveTheme`, and the ONE place that
+   * resolves the slot for a consumer (`theme#warningColor`) falls back to the
+   * same validated value — so nothing downstream ever handles `undefined`.
+   */
+  warning?: string;
   /**
    * v0.3.1 — set by the pipeline (never by a caller) when `forced-colors:
    * active` is in effect and every color above is a CSS system-color keyword.

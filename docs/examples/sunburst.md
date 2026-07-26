@@ -17,7 +17,7 @@ unreadable; a [treemap](treemap.md) uses space better) or flat data (that's
 
 ```ts [Vanilla]
 import { createChart } from '@chartcraft/core';
-import type { DataValue, TreeNode } from '@chartcraft/core';
+import type { TreeNode } from '@chartcraft/core';
 
 const nodes: TreeNode[] = [
   {
@@ -50,8 +50,8 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
   subtitle: 'Last 30 days (thousands)',
   data: {
     series: [
-      // Same cast as treemap: TreeNode[] → DataValue[].
-      { id: 'traffic', name: 'Sessions', data: nodes as unknown as DataValue[] },
+      // No cast needed: a genuine `TreeNode[]` is assignable to `DataValue[]`.
+      { id: 'traffic', name: 'Sessions', data: nodes },
     ],
   },
   a11y: {
@@ -64,7 +64,7 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { SunburstChart } from '@chartcraft/vue';
-import type { DataValue, TreeNode, TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec, TreeNode } from '@chartcraft/vue';
 
 const nodes: TreeNode[] = [
   {
@@ -91,13 +91,13 @@ const nodes: TreeNode[] = [
   },
 ];
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Sessions by traffic source',
   subtitle: 'Last 30 days (thousands)',
   data: {
     series: [
-      // Same cast as treemap: TreeNode[] → DataValue[].
-      { id: 'traffic', name: 'Sessions', data: nodes as unknown as DataValue[] },
+      // No cast needed: a genuine `TreeNode[]` is assignable to `DataValue[]`.
+      { id: 'traffic', name: 'Sessions', data: nodes },
     ],
   },
   a11y: {

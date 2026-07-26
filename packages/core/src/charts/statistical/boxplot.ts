@@ -20,7 +20,7 @@ import type { LegendItem } from '../../components/legend';
 import type { NavContext } from '../../a11y/keyboard';
 import { bandIndexFor, seriesColor } from '../../model';
 import { BandScale } from '../../scales/band';
-import { LinearScale } from '../../scales/linear';
+import { niceValueDomain } from '../../scales';
 import { formatValue } from '../../util';
 import { hitRadius } from '../../interaction/hittest';
 import { summarizeBox, type FiveNumberSummary } from './stats';
@@ -81,8 +81,15 @@ export function boxSummaries(data: ChartData): (FiveNumberSummary | null)[][] {
  * Value domain covering every whisker and outlier of every visible series,
  * `nice()`d. Null when no entry yields a summary (nothing to extend).
  * Pure, so it is unit-testable without mounting a chart.
+ *
+ * `log` (v0.4.0) picks the axis's own rounding convention. It matters here more
+ * than anywhere: a boxplot is the type most likely to be given a log axis (a
+ * distribution spanning two orders of magnitude is exactly when one is needed),
+ * and rounding its floor down to a nice LINEAR multiple turns a 1.2 … 260 extent
+ * into 0 … 300 — a zero floor on an axis that has no zero. With `log` it rounds
+ * to decades instead: 1 … 1000.
  */
-export function boxplotValueDomain(data: ChartData): [number, number] | null {
+export function boxplotValueDomain(data: ChartData, log = false): [number, number] | null {
   let lo = Infinity;
   let hi = -Infinity;
   data.series.forEach((s) => {
@@ -99,8 +106,7 @@ export function boxplotValueDomain(data: ChartData): [number, number] | null {
     lo -= 1;
     hi += 1;
   }
-  const nice = new LinearScale([lo, hi]).nice(5).domain();
-  return [nice[0], nice[1]];
+  return niceValueDomain(lo, hi, log);
 }
 
 export const boxplotDefinition: ChartTypeDefinition = {
@@ -114,8 +120,8 @@ export const boxplotDefinition: ChartTypeDefinition = {
    * generic value extent cannot see them — this is the pipeline's
    * `extendValueDomain` stage, not a rewrite of the caller's `yAxis`.
    */
-  extendValueDomain(_model, opts) {
-    return boxplotValueDomain(opts.data);
+  extendValueDomain(model, opts) {
+    return boxplotValueDomain(opts.data, model.valueAxisLog);
   },
 
   layout(ctx): TypeGeom {

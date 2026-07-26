@@ -254,10 +254,41 @@ interface PointEvent {
   seriesId: string; seriesName: string;
   dataIndex: number;
   x: number | Date | string | null; y: number | null;
+  // v0.4
+  color: string;                      // the colour of the MARK, exactly as drawn
   clientX: number; clientY: number;   // -1 for keyboard-originated events
   native: Event | null;
 }
 ```
+
+### `color`: the mark's colour, so you never re-derive it
+
+`PointEvent.color` (**v0.4**) is the colour of the mark the event is about,
+resolved exactly as the chart drew it: a per-datum `color` override wins, then the
+mark's own palette slot for the types that assign one *per mark*
+(`pie`/`donut`, `rose`, `radialbar`, `sunburst`), then the series' slot. It goes
+through the same code path as `TooltipPoint.color`, so a click swatch and a
+tooltip swatch can never disagree.
+
+```ts
+chart.on('pointclick', (ev) => {
+  detailPanel.show({
+    title: ev.seriesName,
+    swatch: ev.color,          // matches the chart, always
+    value: ev.y,
+  });
+});
+```
+
+Re-deriving it yourself is not merely tedious, it is wrong: palette slots follow
+series **identity** (stable across filtering and updates), not the series' current
+index in `data.series`, and per-mark types assign a slot per slice — so
+`palette[data.series.indexOf(s)]` silently drifts from what is on screen.
+
+`color` is **required**, matching `TooltipPoint.color`. Handlers only ever *read* a
+`PointEvent`, so this is source-compatible for them — but code that
+**constructs** one (a test fixture, a mock, a synthetic event) must now supply
+the field.
 
 `Chart.on` is fully typed — the handler's payload type follows the event
 name — and **returns an unsubscribe function**:
@@ -307,7 +338,11 @@ your own references at the natural scope boundary is still good hygiene.
 - `zoom` fires **once per completed gesture** — a pan writes the viewport
   silently while you drag and emits on release — and only when the window
   actually changed. Zooming all the way out emits `null`, because any axis
-  spanning its full data bounds is dropped from the viewport.
+  spanning its full data bounds is dropped from the viewport. **Every reset emits
+  `null`, including one caused by an `update()`** whose new data moves the domain
+  the window was expressed in, so a "Reset zoom" button can never point at
+  nothing. See
+  [The viewport across an update](../features/zoom-pan-brush.md#the-viewport-across-an-update).
 - `annotationclick` consumes the click, so no `pointclick` follows it.
 - `dataIndex` is the type's natural **mark** index, which is not always a data
   index: a bin for a histogram, a depth-first node for hierarchies, a rank for

@@ -8,6 +8,7 @@ import { reflectComponentType, type Type } from '@angular/core';
 import * as api from '../src/public-api';
 import type { ChartType } from '../src/public-api';
 
+/** The six bridged core events, plus the 0.3.1 lifecycle output. */
 const OUTPUTS = [
   'pointClick',
   'pointEnter',
@@ -15,6 +16,7 @@ const OUTPUTS = [
   'legendToggle',
   'zoom',
   'annotationClick',
+  'ready',
 ];
 
 /**
@@ -86,7 +88,7 @@ describe('public surface (Angular)', () => {
     expect(mirror.isStandalone).toBe(true);
   });
 
-  it('every component declares the single `options` input and the six outputs', () => {
+  it('every component declares the single `options` input and the seven outputs', () => {
     for (const component of [api.CcChart, ...Object.values(BY_TYPE)]) {
       const mirror = reflectComponentType(component)!;
       expect(mirror.inputs.map((i) => i.templateName)).toEqual(['options']);

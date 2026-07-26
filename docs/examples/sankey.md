@@ -73,9 +73,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { SankeyChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Signup to paid conversion',
   subtitle: 'Last quarter · width ∝ users',
   sankey: { nodeWidth: 16, nodePadding: 10, align: 'justify' },

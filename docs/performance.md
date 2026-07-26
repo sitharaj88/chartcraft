@@ -116,9 +116,12 @@ The consequences:
 - **Zooming reveals real detail.** You are not magnifying a downsampled picture:
   a 1M-point series windowed to 3,000 points draws every one of them. A spike that
   LTTB kept as one sample at full extent resolves into its actual shape.
-- **The accessibility table follows the window too.** Zoom a 60,000-point series
-  to one hour and the table (and `exportData()`) describe those ~120 points —
-  keyboard users navigate exactly what is on screen, at the same fidelity.
+- **Keyboard navigation follows the window too.** Zoom a 60,000-point series to
+  one hour and arrow keys walk those ~120 drawn marks — a keyboard user navigates
+  exactly what is on screen, at the same fidelity. The accessibility table and
+  `exportData()` deliberately do *not* narrow: they read the full series, and the
+  accessible description states the difference. See
+  [Accessibility](accessibility.md#the-data-table).
 - **Zoomed frames get cheaper, not dearer.** Fewer candidate points enter LTTB, so
   the deeper you zoom the less work each frame is.
 - **Series below the threshold are never windowed or touched**, which keeps every

@@ -38,9 +38,9 @@ const chart = createChart(document.querySelector<HTMLElement>('#spark-revenue')!
 ```vue [Vue]
 <script setup lang="ts">
 import { SparklineChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   data: {
     series: [
       {

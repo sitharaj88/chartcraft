@@ -9,9 +9,7 @@
 import {
   forwardRef,
   useEffect,
-  useImperativeHandle,
   useRef,
-  useState,
   type CSSProperties,
   type ForwardedRef,
   type ReactElement,
@@ -24,6 +22,7 @@ import type {
   ChartType,
   PointEvent,
 } from '@chartcraft/core';
+import { trackOptionStability, type OptionStabilityProbe } from './dev';
 
 /** The live chart instance type (core's `Chart` interface, renamed to avoid colliding with the `Chart` component). */
 export type ChartInstance = CoreChart;
@@ -105,6 +104,32 @@ export interface ChartProps extends ChartOptions, ChartEventProps {
 /** Convenience-component props: same as ChartProps minus `type`. */
 export type TypedChartProps = Omit<ChartProps, 'type'>;
 
+/**
+ * A chart's options with no `type` — the shape for holding chart configuration
+ * in its own module (`specs.ts`) and spreading it into the matching per-type
+ * component. Identical in every ChartCraft wrapper (`@chartcraft/react`,
+ * `@chartcraft/vue`, `@chartcraft/svelte`, `@chartcraft/angular`).
+ *
+ * ```ts
+ * // specs.ts
+ * import type { ChartSpec } from '@chartcraft/react';
+ * export const revenue: ChartSpec = { title: 'Revenue', data: { ... } };
+ * // App.tsx
+ * <BarChart {...revenue} />
+ * ```
+ *
+ * Note this is options-shaped, not props-shaped: it carries no `className`,
+ * `style` or event handlers. Use {@link TypedChartProps} for the full prop set
+ * of a per-type component.
+ */
+export type ChartSpec = Omit<ChartOptions, 'type'>;
+
+/** Assign a forwarded ref (object or callback form). */
+function setRef(ref: ForwardedRef<ChartInstance>, value: ChartInstance | null): void {
+  if (typeof ref === 'function') ref(value);
+  else if (ref) ref.current = value;
+}
+
 function ChartImpl(props: ChartProps, ref: ForwardedRef<ChartInstance>): ReactElement {
   const {
     className,
@@ -120,7 +145,6 @@ function ChartImpl(props: ChartProps, ref: ForwardedRef<ChartInstance>): ReactEl
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<ChartInstance | null>(null);
-  const [instance, setInstance] = useState<ChartInstance | null>(null);
 
   // Latest-value refs so the mount effect can subscribe once while handlers
   // and options stay swappable without re-subscribing or re-creating.
@@ -148,22 +172,41 @@ function ChartImpl(props: ChartProps, ref: ForwardedRef<ChartInstance>): ReactEl
     chart.on('zoom', (ev) => handlersRef.current.onZoom?.(ev));
     chart.on('annotationclick', (ev) => handlersRef.current.onAnnotationClick?.(ev));
     chartRef.current = chart;
-    setInstance(chart);
     return () => {
       chartRef.current = null;
-      setInstance(null);
       chart.destroy(); // removes DOM, observers, listeners
     };
   }, []);
 
-  // Expose the core Chart instance through the ref.
-  useImperativeHandle(ref, () => instance as ChartInstance, [instance]);
+  /*
+   * Expose the core Chart instance through the forwarded ref.
+   *
+   * Declared AFTER the mount effect on purpose: effects within a component run
+   * in declaration order, and React flushes ALL child effects before a parent's,
+   * so by the time a parent's own mount `useEffect` runs, `ref.current` is
+   * already the instance. The previous `useImperativeHandle(ref, …, [instance])`
+   * could not manage that — it is a layout effect keyed on component *state*, so
+   * the ref stayed `null` until the extra render caused by `setInstance` had
+   * committed, i.e. one render too late for a parent's setup code.
+   */
+  useEffect(() => {
+    setRef(ref, chartRef.current);
+    return () => setRef(ref, null);
+  }, [ref]);
 
   // Option updates → chart.update() (core deep-merges and diffs). The
   // dependency list is one entry per ChartOptions key (see OPTION_KEYS): a
   // fixed-length array, exhaustive by construction.
   const firstUpdate = useRef(true);
+  const stabilityProbe = useRef<OptionStabilityProbe | null>(null);
   useEffect(() => {
+    // Development-only: catch the "fresh object literal on every render" trap
+    // that this identity-based diff makes so easy to fall into. The guard is a
+    // literal NODE_ENV check, so a production bundle folds it away and drops
+    // ./dev entirely — see src/dev.ts.
+    if (process.env.NODE_ENV !== 'production') {
+      stabilityProbe.current = trackOptionStability(stabilityProbe.current, optionsRef.current);
+    }
     if (firstUpdate.current) {
       firstUpdate.current = false;
       return;

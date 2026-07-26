@@ -2,8 +2,45 @@ import { roundFP } from '../util';
 import { niceTicks } from './linear';
 
 /**
- * Base-10 logarithmic scale. Domain must be positive; values are clamped to
- * a tiny epsilon to stay finite.
+ * The clamp a non-positive number is folded to so `log10` stays finite.
+ *
+ * v0.4.0 — this is a RENDER-TIME guard for an individual value that falls
+ * outside the domain, never a domain policy. Clamping a non-positive DOMAIN
+ * bound to it is what produced the 1e-12 … 1e3 axis reported from the sample
+ * dashboard: a 0 floor contributed by a linear-axis convention (zero anchoring,
+ * or a `nice()` that rounds a floor down to zero) became twelve empty decades
+ * and squashed every mark into the top tenth of the plot. Callers that build a
+ * log axis go through `positiveLogDomain` first, so the clamp is only ever
+ * reached by a value, never by a bound.
+ */
+export const LOG_EPSILON = 1e-12;
+
+/**
+ * A strictly positive `[lo, hi]` for a log axis.
+ *
+ * A log scale has no representation for 0 or for a negative number — there is
+ * no "outward" direction toward zero — so a non-positive bound cannot be
+ * clamped, only DISCARDED. The order of preference is:
+ *
+ *   1. `hi` when positive, else 1 (a log axis with no positive top is
+ *      degenerate; one decade is the smallest sane thing to show).
+ *   2. `lo` when positive AND below `hi`, else one decade below `hi`.
+ *
+ * This is the single place the "a log axis derives its domain from the positive
+ * data only" rule is expressed; the pipeline keeps non-positive bounds out of
+ * `model.yDomain` in the first place (see `model.ts#valueExtentOf`) and this is
+ * the belt to that braces — an explicit `min: 0` from the caller, a viewport
+ * override, a decorator's widening.
+ */
+export function positiveLogDomain(lo: number, hi: number): [number, number] {
+  const hiOk = Number.isFinite(hi) && hi > 0 ? hi : 1;
+  const loOk = Number.isFinite(lo) && lo > 0 && lo < hiOk ? lo : hiOk / 10;
+  return [loOk, hiOk];
+}
+
+/**
+ * Base-10 logarithmic scale. The domain must be positive; individual values
+ * outside it are clamped to `LOG_EPSILON` to stay finite.
  */
 export class LogScale {
   private d0 = 1;
@@ -17,7 +54,7 @@ export class LogScale {
   }
 
   private static safe(v: number): number {
-    return v > 0 ? v : 1e-12;
+    return v > 0 ? v : LOG_EPSILON;
   }
 
   domain(d?: [number, number]): [number, number] {

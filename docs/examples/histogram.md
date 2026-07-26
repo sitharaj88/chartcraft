@@ -44,7 +44,7 @@ const chart = createChart(document.querySelector<HTMLElement>('#chart')!, {
 ```vue [Vue]
 <script setup lang="ts">
 import { HistogramChart } from '@chartcraft/vue';
-import type { TypedChartOptions } from '@chartcraft/vue';
+import type { ChartSpec } from '@chartcraft/vue';
 
 // Deterministic pseudo-normal samples: checkout durations in seconds.
 let s = 42;
@@ -55,7 +55,7 @@ const samples = Array.from({ length: 420 }, () => {
   return Math.round(Math.max(4, base + tail) * 10) / 10;
 });
 
-const options: TypedChartOptions = {
+const options: ChartSpec = {
   title: 'Checkout duration',
   subtitle: '420 orders, last 7 days',
   histogram: { bins: 'auto' }, // Freedman–Diaconis, clamped 5..60 (the default)
